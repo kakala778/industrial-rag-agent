@@ -31,7 +31,10 @@ def load_documents(docs_dir=None):
     documents = []
     for path in markdown_files:
         documents.append(
-            {"text": path.read_text(encoding="utf-8"), "source": path.name}
+            {
+                "text": path.read_text(encoding="utf-8"),
+                "metadata": {"source": path.name, "page": None},
+            }
         )
     return documents
 
@@ -48,6 +51,12 @@ def split_documents(documents, max_chars=500, overlap=80):
     chunks = []
 
     for document in documents:
+        metadata = dict(document.get("metadata") or {})
+        source = metadata.get("source", document.get("source"))
+        if source is None:
+            raise KeyError("document must include metadata.source or source")
+        metadata["source"] = source
+        metadata.setdefault("page", None)
         chunk_id = 0
 
         # Markdown headings + paragraphs
@@ -64,8 +73,9 @@ def split_documents(documents, max_chars=500, overlap=80):
                 chunks.append(
                     {
                         "text": text,
-                        "source": document["source"],
+                        "source": source,
                         "chunk_id": chunk_id,
+                        "metadata": metadata.copy(),
                     }
                 )
                 chunk_id += 1
@@ -83,8 +93,9 @@ def split_documents(documents, max_chars=500, overlap=80):
                     chunks.append(
                         {
                             "text": chunk_text,
-                            "source": document["source"],
+                            "source": source,
                             "chunk_id": chunk_id,
+                            "metadata": metadata.copy(),
                         }
                     )
                     chunk_id += 1
@@ -159,6 +170,12 @@ def retrieve(query_embedding, chunks, embeddings, top_k=3):
             "source": chunks[index]["source"],
             "chunk_id": chunks[index]["chunk_id"],
             "text": chunks[index]["text"],
+            "metadata": dict(
+                chunks[index].get(
+                    "metadata",
+                    {"source": chunks[index]["source"], "page": None},
+                )
+            ),
         }
         for index in best_indices
     ]

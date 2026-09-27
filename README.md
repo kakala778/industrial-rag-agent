@@ -34,6 +34,10 @@ M3 — Citation + Retrieval Evaluation completed. The RAG CLI displays the
 retrieved source, chunk ID, and similarity score after each answer. A separate
 10-question retrieval evaluation reports Top-1 and Top-3 source accuracy.
 
+M4.1 PDF loading completed. M4.2 Unified document pipeline completed. Markdown
+and PDF now use the same Document format, and PDF documents can use the existing
+chunking, retrieval, and local RAG flow.
+
 The current retrieval flow is:
 
 ```text
@@ -55,12 +59,12 @@ M1 retrieves and ranks document chunks. It does not generate answers.
 ### Document Loading
 
 - Reads Markdown files from `examples/docs/`.
-- Preserves each document's text and source filename.
+- Preserves each document's text, source filename, and a null page value.
 
 ```python
 {
     "text": "...",
-    "source": "xxx.md"
+    "metadata": {"source": "xxx.md", "page": None}
 }
 ```
 
@@ -224,12 +228,47 @@ python evaluation/evaluate_retrieval.py
 It reuses `src/retrieval.py` and reports exact expected-source matches at
 Top-1 and Top-3. It does not evaluate generated answers.
 
+## M4 — Document Intelligence Pipeline
+
+M4.1 PDF loading and M4.2 the unified document pipeline are completed. The
+Markdown and PDF loaders produce documents shaped as:
+
+```python
+{
+    "text": "...",
+    "metadata": {"source": "example.pdf", "page": 1}
+}
+```
+
+PDFs can use the existing retrieval and RAG implementation through the PDF
+demo:
+
+```bash
+python src/pdf_rag_demo.py examples/pdf/w3c-dummy.pdf
+```
+
+This is a baseline text extraction path; it does not add OCR or table parsing.
+
+### M4 PDF Retrieval Evaluation Baseline
+
+Run the retrieval-only PDF baseline from the repository root:
+
+```bash
+python evaluation/evaluate_pdf_retrieval.py
+```
+
+It evaluates Top-1 and Top-3 source hits and expected-keyword hits using the
+fixed questions in `evaluation/pdf_qa_dataset.json`. It does not call the LLM.
+
+Supported: text-based PDFs and page metadata in source output. Current
+limitations: complex tables, scanned documents, and layout-heavy documents.
+
 ## Roadmap
 
 - [x] Project initialization
 - [x] M1 — Minimal Retrieval Pipeline
 - [x] M2 — Basic RAG
-- [ ] PDF ingestion
+- [x] PDF ingestion
 - [x] M3 — Source citation
 - [x] Retrieval evaluation
 - [ ] Agent

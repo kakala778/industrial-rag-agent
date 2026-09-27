@@ -57,13 +57,17 @@ def format_sources(results):
     seen = set()
 
     for result in results:
-        citation_key = (result["source"], result["chunk_id"])
+        metadata = result.get("metadata", {})
+        page = metadata.get("page")
+        citation_key = (result["source"], page, result["chunk_id"])
         if citation_key in seen:
             continue
         seen.add(citation_key)
+        page_line = f"Page:\n{page}\n\n" if page is not None else ""
         citations.append(
             f"[{len(citations) + 1}]\n"
             f"File:\n{result['source']}\n\n"
+            f"{page_line}"
             f"Chunk:\n{result['chunk_id']}\n\n"
             f"Score:\n{result['score']:.4f}"
         )
