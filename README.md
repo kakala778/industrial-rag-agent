@@ -326,6 +326,16 @@ fixed questions in `evaluation/pdf_qa_dataset.json`. It does not call the LLM.
 Supported: text-based PDFs and page metadata in source output. Current
 limitations: complex tables, scanned documents, and layout-heavy documents.
 
+## M5 — Local RAG Baseline Freeze
+
+The `v0.5-local-rag-generation` checkpoint freezes the M1–M5 local RAG
+prototype: Markdown/text-based PDF loading, Top-K retrieval, retrieved-context
+prompting, and answer generation through Ollama's local `/api/generate` API
+with `qwen3:4b`. The CLI displays the retrieved source information, including
+PDF page metadata when available. This remains a learning baseline; M6
+engineering work has not started. Benchmark snapshots and known limitations
+are recorded in [`docs/m1-m5-summary.md`](docs/m1-m5-summary.md).
+
 ## Roadmap
 
 - [x] Project initialization
