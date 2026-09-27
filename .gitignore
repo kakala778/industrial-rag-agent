@@ -11,9 +11,12 @@ venv/
 data/
 outputs/
 output/
+.local/
+.mineru-home/
 *.pdf
 /examples/docs/*
 !/examples/docs/README.md
+evaluation/industrial_pdf_qa.local.json
 
 # Local model files
 .ollama/

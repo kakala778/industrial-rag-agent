@@ -8,10 +8,11 @@ industrial-grade RAG system or production service.
 
 ## Frozen Baseline Status
 
-This checkpoint freezes the current M1–M5 baseline before M6 engineering
-extensions. It includes Markdown and text-based PDF loading, retrieval and
-evaluation, local Ollama generation, RAG context construction, and source/page
-citations. M6 has not started.
+The `v0.5-local-rag-generation` tag freezes the M1–M5 baseline: Markdown and
+text-based PDF loading, retrieval and evaluation, local Ollama generation,
+RAG context construction, and source/page citations. M6 parser integration is
+ready on the M6 development branch; industrial-PDF evaluation is still
+pending.
 
 ## Current Architecture
 
@@ -332,9 +333,48 @@ The `v0.5-local-rag-generation` checkpoint freezes the M1–M5 local RAG
 prototype: Markdown/text-based PDF loading, Top-K retrieval, retrieved-context
 prompting, and answer generation through Ollama's local `/api/generate` API
 with `qwen3:4b`. The CLI displays the retrieved source information, including
-PDF page metadata when available. This remains a learning baseline; M6
-engineering work has not started. Benchmark snapshots and known limitations
-are recorded in [`docs/m1-m5-summary.md`](docs/m1-m5-summary.md).
+PDF page metadata when available. This remains a learning baseline. Benchmark
+snapshots and known limitations are recorded in
+[`docs/m1-m5-summary.md`](docs/m1-m5-summary.md).
+
+## M6 — MinerU Industrial PDF RAG
+
+The PDF RAG CLI keeps PyMuPDF as its default parser and adds an optional local
+MinerU 4.0.5 Advanced/OCR path. MinerU remains in its separate
+`mineru-405-poc` environment; the adapter calls `run-mineru.ps1` through
+PowerShell and reads the actual Middle JSON output. The shared document,
+chunking, embedding, retrieval, and generation paths are reused.
+
+```bash
+python src/pdf_rag_demo.py path/to/document.pdf --parser pymupdf
+python src/pdf_rag_demo.py path/to/document.pdf --parser mineru
+```
+
+Set `MINERU_RUNNER_PATH` or pass `--mineru-runner` if the runner is outside the
+default sibling workspace location. MinerU results are cached under
+`.local/mineru/`, keyed by the PDF content and parser settings. Use
+`--force-parse` to replace a cached parse.
+
+Run the same PDF QA set through either parser:
+
+```bash
+python evaluation/evaluate_pdf_retrieval.py --pdf path/to/document.pdf --dataset evaluation/industrial_pdf_qa.local.json --parser pymupdf
+python evaluation/evaluate_pdf_retrieval.py --pdf path/to/document.pdf --dataset evaluation/industrial_pdf_qa.local.json --parser mineru
+```
+
+The ignored local QA file starts empty. Cases may include `question`,
+`expected_source`, 1-based `expected_page`, `expected_keywords`, optional
+`answer`, `category`, and `review_required`. Ground truth must be checked
+against the original PDF; a page label requires `expected_source` to avoid
+cross-document page-number matches. `review_required: true` cases are excluded
+from evaluation. The evaluator reports parser/document/chunk stats, Top-1/Top-3
+page and source hits, evidence/keyword hits, and failure categories. It does
+not evaluate generated answers.
+
+The adapter and parser selection are smoke-tested with a synthetic scanned
+PDF. Industrial-PDF A/B results and end-to-end answer validation have not yet
+been measured. Complex tables, scanned-page completeness, and layout-heavy
+documents remain unverified for this RAG pipeline.
 
 ## Roadmap
 
@@ -345,7 +385,8 @@ are recorded in [`docs/m1-m5-summary.md`](docs/m1-m5-summary.md).
 - [x] M3 — Source citation
 - [x] Retrieval evaluation
 - [x] M5 — Baseline freeze
-- [ ] M6 — Engineering extension
+- [x] M6 — MinerU parser integration infrastructure
+- [ ] M6 — Industrial PDF A/B and end-to-end validation
 - [ ] Agent
 - [ ] Industrial document improvements
 
@@ -362,5 +403,6 @@ are recorded in [`docs/m1-m5-summary.md`](docs/m1-m5-summary.md).
 - Teacher-provided data will not be uploaded.
 - API keys will not be uploaded.
 - MinerU parsing results from real documents will not be uploaded.
+- `.local/mineru/`, `.mineru-home/`, and `evaluation/industrial_pdf_qa.local.json` are local-only and ignored by Git.
 - `.env` will not be uploaded.
 - Future test data in this repository will be self-created or explicitly permitted for public use.

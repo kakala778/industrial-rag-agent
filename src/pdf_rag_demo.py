@@ -20,9 +20,20 @@ else:
     from retrieval import TOP_K, embed_chunks, load_model, retrieve, split_documents
 
 
-def initialize_pdf_retriever(pdf_path):
+def initialize_pdf_retriever(
+    pdf_path,
+    parser="pymupdf",
+    *,
+    force_parse=False,
+    mineru_runner=None,
+):
     """Load, chunk, and embed a PDF once for this demo session."""
-    documents = load_pdf(pdf_path)
+    documents = load_pdf(
+        pdf_path,
+        parser=parser,
+        force=force_parse,
+        runner_path=mineru_runner,
+    )
     chunks = split_documents(documents)
     if not chunks:
         raise ValueError("No non-empty text chunks were found in the PDF.")
@@ -31,19 +42,45 @@ def initialize_pdf_retriever(pdf_path):
     return documents, chunks, model, embeddings
 
 
-def main():
+def build_argument_parser():
     parser = argparse.ArgumentParser(
         description="Ask questions against one PDF using the local RAG pipeline."
     )
     parser.add_argument("pdf_path", type=Path, help="Path to a PDF knowledge source")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--parser",
+        choices=("pymupdf", "mineru"),
+        default="pymupdf",
+        help="PDF parser (default: pymupdf baseline)",
+    )
+    parser.add_argument(
+        "--force-parse",
+        action="store_true",
+        help="Re-run MinerU instead of using its local parse cache",
+    )
+    parser.add_argument(
+        "--mineru-runner",
+        type=Path,
+        help="Path to run-mineru.ps1 (otherwise use MINERU_RUNNER_PATH/default)",
+    )
+    return parser
+
+
+def main():
+    args = build_argument_parser().parse_args()
 
     try:
-        documents, chunks, model, embeddings = initialize_pdf_retriever(args.pdf_path)
+        documents, chunks, model, embeddings = initialize_pdf_retriever(
+            args.pdf_path,
+            parser=args.parser,
+            force_parse=args.force_parse,
+            mineru_runner=args.mineru_runner,
+        )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
+    print(f"Parser: {args.parser}")
     print(f"Loaded {len(documents)} PDF pages into {len(chunks)} chunks.")
 
     while True:
