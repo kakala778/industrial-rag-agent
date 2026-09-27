@@ -12,6 +12,8 @@ data/
 outputs/
 output/
 *.pdf
+/examples/docs/*
+!/examples/docs/README.md
 
 # IDE
 .vscode/
