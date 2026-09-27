@@ -51,6 +51,26 @@ def build_prompt(question, context):
     return f"参考资料：\n\n{context}\n\n问题：\n\n{question}"
 
 
+def format_sources(results):
+    """Format unique source/chunk pairs with their retrieval scores."""
+    citations = []
+    seen = set()
+
+    for result in results:
+        citation_key = (result["source"], result["chunk_id"])
+        if citation_key in seen:
+            continue
+        seen.add(citation_key)
+        citations.append(
+            f"[{len(citations) + 1}]\n"
+            f"File:\n{result['source']}\n\n"
+            f"Chunk:\n{result['chunk_id']}\n\n"
+            f"Score:\n{result['score']:.4f}"
+        )
+
+    return "\n\n".join(citations)
+
+
 def generate_answer(prompt):
     """Send one non-streaming chat request to the local Ollama API."""
     payload = {
@@ -159,6 +179,9 @@ def main():
             return 1
 
         print(f"\n回答：\n\n{answer}\n")
+        sources = format_sources(results)
+        if sources:
+            print(f"Sources:\n\n{sources}\n")
 
     return 0
 
