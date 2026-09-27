@@ -11,8 +11,9 @@ industrial-grade RAG system or production service.
 The `v0.5-local-rag-generation` tag freezes the M1–M5 baseline: Markdown and
 text-based PDF loading, retrieval and evaluation, local Ollama generation,
 RAG context construction, and source/page citations. M6 parser integration is
-ready on the M6 development branch; industrial-PDF evaluation is still
-pending.
+under development on its feature branch. A local MinerU pilot has been
+measured, but M6 industrial-document validation remains partial and is not a
+release baseline.
 
 ## Current Architecture
 
@@ -372,9 +373,16 @@ page and source hits, evidence/keyword hits, and failure categories. It does
 not evaluate generated answers.
 
 The adapter and parser selection are smoke-tested with a synthetic scanned
-PDF. Industrial-PDF A/B results and end-to-end answer validation have not yet
-been measured. Complex tables, scanned-page completeness, and layout-heavy
-documents remain unverified for this RAG pipeline.
+PDF. A local evaluation then parsed 7 of 8 anonymized PDFs (357 of 662 pages),
+compared PyMuPDF and MinerU on 10 manually checked pilot questions, scored two
+additional table cases separately, and ran 10 local Qwen3 RAG questions. On
+the pilot set, MinerU Top-3 page hit was 6/10 and normalized evidence hit was
+5/10, compared with 3/10 and 2/10 for PyMuPDF. The separate table cases had
+0/2 normalized evidence hits for both parsers. These small, local results are
+not a general quality claim; text-volume expansion on some documents also
+signals possible OCR noise. The 305-page scan was deferred, and complex table
+reconstruction, scanned-page completeness, and human-scored answer correctness
+remain unverified. See the anonymized [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
 ## Roadmap
 
@@ -386,7 +394,8 @@ documents remain unverified for this RAG pipeline.
 - [x] Retrieval evaluation
 - [x] M5 — Baseline freeze
 - [x] M6 — MinerU parser integration infrastructure
-- [ ] M6 — Industrial PDF A/B and end-to-end validation
+- [x] M6 — Local pilot A/B and RAG smoke run
+- [ ] M6 — Broader original-PDF-grounded QA and large-scan validation
 - [ ] Agent
 - [ ] Industrial document improvements
 
