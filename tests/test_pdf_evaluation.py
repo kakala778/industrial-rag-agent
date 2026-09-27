@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from evaluation.evaluate_pdf_retrieval import (
+    _diagnose_failure,
     build_argument_parser,
     evaluate_questions,
     load_questions,
@@ -98,6 +99,203 @@ class PdfEvaluationTests(unittest.TestCase):
         self.assertEqual(report["top3_page_hits"], 1)
         self.assertEqual(report["keyword_hits"], 1)
 
+    def test_normalized_evidence_metric_keeps_raw_keyword_metric(self):
+        questions = [
+            {
+                "question": "What is the discharge current and insertion loss?",
+                "source": "manual.pdf",
+                "expected_page": 2,
+                "expected_keywords": ["1.5kA", "0.5dB"],
+                "category": "multi_fact",
+            }
+        ]
+        chunks = [
+            {
+                "source": "manual.pdf",
+                "chunk_id": 0,
+                "text": "Video protector: 1.5 kA, insertion loss 0.5 dB.",
+                "metadata": {"source": "manual.pdf", "page": 2},
+            }
+        ]
+        embeddings = np.array([[1.0, 0.0]], dtype=np.float32)
+
+        report = evaluate_questions(questions, FixedModel(), chunks, embeddings)
+
+        self.assertEqual(report["keyword_hits"], 0)
+        self.assertEqual(report["normalized_keyword_hits"], 1)
+        self.assertFalse(report["cases"][0]["keyword_hit"])
+        self.assertTrue(report["cases"][0]["normalized_keyword_hit"])
+
+    def test_evidence_keywords_from_wrong_document_do_not_count(self):
+        questions = [
+            {
+                "question": "What is the expected value?",
+                "expected_source": "target.pdf",
+                "expected_page": 2,
+                "expected_keywords": ["0.82 MPa"],
+                "category": "unit",
+            }
+        ]
+        chunks = [
+            {
+                "source": "other.pdf",
+                "chunk_id": 0,
+                "text": "An unrelated specification says 0.82 MPa.",
+                "metadata": {"source": "other.pdf", "page": 1},
+            },
+            {
+                "source": "target.pdf",
+                "chunk_id": 1,
+                "text": "The target page contains unrelated notes.",
+                "metadata": {"source": "target.pdf", "page": 2},
+            },
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.8, 0.6]], dtype=np.float32)
+
+        report = evaluate_questions(questions, FixedModel(), chunks, embeddings)
+
+        self.assertEqual(report["top3_source_hits"], 1)
+        self.assertEqual(report["top3_page_hits"], 1)
+        self.assertEqual(report["keyword_hits"], 0)
+        self.assertEqual(report["normalized_keyword_hits"], 0)
+
+    def test_normalized_evidence_does_not_join_text_across_chunks(self):
+        question = {
+            "question": "Does the token AB appear in one result?",
+            "expected_source": "target.pdf",
+            "expected_keywords": ["AB"],
+            "category": "text",
+        }
+        chunks = [
+            {
+                "source": "target.pdf",
+                "chunk_id": 0,
+                "text": "A",
+                "metadata": {"source": "target.pdf", "page": 1},
+            },
+            {
+                "source": "target.pdf",
+                "chunk_id": 1,
+                "text": "B",
+                "metadata": {"source": "target.pdf", "page": 1},
+            },
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.9, 0.1]], dtype=np.float32)
+
+        report = evaluate_questions(
+            [question],
+            FixedModel(),
+            chunks,
+            embeddings,
+            documents=[
+                {"text": "A\nB", "metadata": {"source": "target.pdf", "page": 1}}
+            ],
+        )
+
+        self.assertEqual(report["keyword_hits"], 0)
+        self.assertEqual(report["normalized_keyword_hits"], 0)
+
+        separate_keywords_report = evaluate_questions(
+            [{**question, "expected_keywords": ["A", "B"]}],
+            FixedModel(),
+            chunks,
+            embeddings,
+            documents=[
+                {"text": "A\nB", "metadata": {"source": "target.pdf", "page": 1}}
+            ],
+        )
+
+        self.assertEqual(separate_keywords_report["normalized_keyword_hits"], 1)
+
+    def test_failure_diagnosis_separates_parsing_chunking_retrieval_and_ranking(self):
+        question = {
+            "question": "Which manual values apply?",
+            "expected_source": "manual.pdf",
+            "expected_page": 2,
+            "expected_keywords": ["alpha", "beta"],
+        }
+        document = {
+            "text": "alpha beta",
+            "metadata": {"source": "manual.pdf", "page": 2},
+        }
+        evidence_chunk = {
+            "source": "manual.pdf",
+            "text": "alpha beta",
+            "metadata": {"source": "manual.pdf", "page": 2},
+        }
+        decoy = {
+            "source": "other.pdf",
+            "text": "unrelated",
+            "metadata": {"source": "other.pdf", "page": 1},
+        }
+
+        parsing, _ = _diagnose_failure(
+            question,
+            [{"text": "no evidence", "metadata": {"source": "manual.pdf", "page": 2}}],
+            [],
+            [],
+        )
+        chunking, _ = _diagnose_failure(
+            question,
+            [document],
+            [
+                {**evidence_chunk, "text": "alpha"},
+                {**evidence_chunk, "text": "unrelated"},
+            ],
+            [],
+        )
+        split_evidence_ranking, _ = _diagnose_failure(
+            question,
+            [document],
+            [
+                {**evidence_chunk, "text": "alpha"},
+                {**evidence_chunk, "text": "beta"},
+            ],
+            [decoy] * 3
+            + [
+                {**evidence_chunk, "text": "alpha"},
+                {**evidence_chunk, "text": "beta"},
+            ]
+            + [decoy] * 5,
+        )
+        target_page_without_evidence = {
+            "source": "manual.pdf",
+            "text": "general introduction",
+            "metadata": {"source": "manual.pdf", "page": 2},
+        }
+        target_page_without_top10_evidence, _ = _diagnose_failure(
+            question,
+            [document],
+            [evidence_chunk],
+            [decoy, target_page_without_evidence] + [decoy] * 8,
+        )
+        retrieval, _ = _diagnose_failure(
+            question,
+            [document],
+            [evidence_chunk],
+            [decoy] * 10,
+        )
+        ranking, _ = _diagnose_failure(
+            question,
+            [document],
+            [evidence_chunk],
+            [decoy] * 4 + [evidence_chunk] + [decoy] * 5,
+        )
+        top1_ranking, _ = _diagnose_failure(
+            question,
+            [document],
+            [evidence_chunk],
+            [decoy, evidence_chunk],
+        )
+
+        self.assertEqual(parsing, "PARSING")
+        self.assertEqual(chunking, "CHUNKING")
+        self.assertEqual(split_evidence_ranking, "RANKING")
+        self.assertEqual(target_page_without_top10_evidence, "RETRIEVAL")
+        self.assertEqual(retrieval, "RETRIEVAL")
+        self.assertEqual(ranking, "RANKING")
+        self.assertEqual(top1_ranking, "RANKING")
+
     def test_cli_accepts_pdf_dataset_and_parser_selection(self):
         args = build_argument_parser().parse_args(
             [
@@ -150,6 +348,7 @@ class PdfEvaluationTests(unittest.TestCase):
         self.assertEqual(model.calls, 0)
         self.assertEqual(report["not_applicable_total"], 1)
         self.assertEqual(report["evaluated_total"], 0)
+        self.assertIsNone(report["cases"][0]["error_layer"])
 
     def test_empty_baseline_chunks_report_misses_without_loading_a_model(self):
         questions = [

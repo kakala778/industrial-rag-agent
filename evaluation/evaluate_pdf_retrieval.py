@@ -2,8 +2,10 @@
 
 import argparse
 import json
+import re
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 
@@ -11,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PDF_DIR = PROJECT_ROOT / "examples" / "pdf"
 DATASET_PATH = Path(__file__).resolve().parent / "pdf_qa_dataset.json"
 TOP_K = 3
+DIAGNOSTIC_K = 10
 CATEGORIES = {
     "text",
     "numeric",
@@ -102,6 +105,11 @@ def _expected_source(item):
     return item.get("expected_source", item.get("source"))
 
 
+def _normalize_evidence_text(text):
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    return re.sub(r"\s+", "", normalized)
+
+
 def load_pdf_documents(
     pdf_dir,
     questions,
@@ -168,38 +176,89 @@ def _page_hit(result, expected_page, expected_source):
     )
 
 
-def _diagnose_failure(case, documents):
-    source = case["source"]
-    expected_page = case["expected_page"]
-    keywords = case["expected_keywords"]
-    source_documents = [
-        document
-        for document in documents
-        if source is None or document.get("metadata", {}).get("source") == source
+def _matches_case_scope(item, value):
+    metadata = value.get("metadata") or {}
+    expected_source = _expected_source(item)
+    expected_page = item.get("expected_page")
+    source = value.get("source", metadata.get("source"))
+    if expected_source is not None and source != expected_source:
+        return False
+    if expected_page is not None and metadata.get("page") != expected_page:
+        return False
+    return True
+
+
+def _contains_keywords_in_texts(texts, keywords):
+    normalized_texts = [_normalize_evidence_text(text) for text in texts]
+    return all(
+        any(_normalize_evidence_text(keyword) in text for text in normalized_texts)
+        for keyword in keywords
+    )
+
+
+def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
+    """Classify a retrieval miss using loaded pages, chunks, and Top-10 rank."""
+    keywords = item.get("expected_keywords", [])
+    if item.get("review_required", False):
+        return "GT_UNCERTAIN", "Ground truth requires human review."
+
+    scoped_documents = [
+        document for document in documents if _matches_case_scope(item, document)
     ]
+    if not scoped_documents:
+        return "PARSING", "The expected source/page is absent from loaded documents."
 
-    if expected_page is not None:
-        page_documents = [
-            document
-            for document in source_documents
-            if document.get("metadata", {}).get("page") == expected_page
-        ]
-        if not page_documents:
-            return "Parsing: expected page is absent from loaded documents."
-        page_text = "\n".join(document.get("text", "") for document in page_documents).casefold()
-        if any(keyword.casefold() not in page_text for keyword in keywords):
-            return "Parsing: expected evidence is missing from the loaded page text."
-        if case["top3_page_hit"]:
-            return "Chunking: expected page was retrieved, but expected evidence is absent from its Top-K chunks."
-        return "Retrieval: expected page text exists, but its page was not retrieved in Top-K."
+    if keywords and not _contains_keywords_in_texts(
+        [document.get("text", "") for document in scoped_documents], keywords
+    ):
+        return "PARSING", "Expected evidence is missing from the loaded source/page text."
 
-    if keywords:
-        loaded_text = "\n".join(
-            document.get("text", "") for document in source_documents
-        ).casefold()
-        if any(keyword.casefold() not in loaded_text for keyword in keywords):
-            return "Parsing: expected evidence is missing from the loaded document text."
-    return "Retrieval: expected source/evidence was not found in Top-K."
+    scoped_chunks = [chunk for chunk in chunks if _matches_case_scope(item, chunk)]
+    if keywords and not scoped_chunks:
+        return "CHUNKING", "Loaded source/page evidence did not produce any chunks."
+    if keywords and not _contains_keywords_in_texts(
+        [chunk.get("text", "") for chunk in scoped_chunks], keywords
+    ):
+        return "CHUNKING", "Expected evidence was lost while splitting the source/page into chunks."
+
+    scoped_diagnostic_results = [
+        result
+        for result in diagnostic_results
+        if _matches_case_scope(item, result)
+    ]
+    evidence_in_diagnostic_results = (
+        _contains_keywords_in_texts(
+            [result.get("text", "") for result in scoped_diagnostic_results],
+            keywords,
+        )
+        if keywords
+        else bool(scoped_diagnostic_results)
+    )
+    top_k_results = [
+        result
+        for result in diagnostic_results[:top_k]
+        if _matches_case_scope(item, result)
+    ]
+    evidence_in_top_k = (
+        _contains_keywords_in_texts(
+            [result.get("text", "") for result in top_k_results], keywords
+        )
+        if keywords
+        else bool(top_k_results)
+    )
+
+    if (
+        evidence_in_diagnostic_results
+        and scoped_diagnostic_results
+        and diagnostic_results
+        and not _matches_case_scope(item, diagnostic_results[0])
+    ):
+        return "RANKING", "Expected source/page evidence is in diagnostic Top-K but rank 1 is outside scope."
+
+    if evidence_in_diagnostic_results and not evidence_in_top_k:
+        return "RANKING", f"Expected evidence appears in diagnostic Top-{len(diagnostic_results)} but not Top-{top_k}."
+
+    return "RETRIEVAL", "Expected evidence exists in chunks but was not retrieved in Top-10."
 
 
 def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, documents=None):
@@ -228,7 +287,10 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                     "top1_page_hit": None,
                     "top3_page_hit": None,
                     "keyword_hit": None,
+                    "normalized_keyword_hit": None,
                     "results": [],
+                    "diagnostic_results": [],
+                    "error_layer": "GT_UNCERTAIN",
                     "reason": "Ground truth requires human review; this case was not evaluated.",
                 }
             )
@@ -254,8 +316,11 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                     "top1_page_hit": None,
                     "top3_page_hit": None,
                     "keyword_hit": None,
+                    "normalized_keyword_hit": None,
                     "results": [],
-                    "reason": "Unanswerable case has no retrieval labels; evaluate it with generation later.",
+                    "diagnostic_results": [],
+                    "error_layer": None,
+                    "reason": None,
                 }
             )
             continue
@@ -266,10 +331,16 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                 convert_to_numpy=True,
                 show_progress_bar=False,
             )
-            results = retrieve(query_embedding, chunks, embeddings, top_k=top_k)
+            results = retrieve(
+                query_embedding,
+                chunks,
+                embeddings,
+                top_k=max(top_k, DIAGNOSTIC_K),
+            )
         else:
             results = []
         top_results = results[:top_k]
+        diagnostic_results = results[:max(top_k, DIAGNOSTIC_K)]
 
         top1_source_hit = (
             None
@@ -294,11 +365,24 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                 for result in top_results
             )
         )
-        retrieved_text = "\n".join(result["text"] for result in top_results).casefold()
+        evidence_results = [
+            result for result in top_results if _matches_case_scope(item, result)
+        ]
+        retrieved_text = "\n".join(
+            result["text"] for result in evidence_results
+        ).casefold()
         keyword_hit = (
             None
             if not expected_keywords
             else all(keyword.casefold() in retrieved_text for keyword in expected_keywords)
+        )
+        normalized_keyword_hit = (
+            None
+            if not expected_keywords
+            else _contains_keywords_in_texts(
+                [result.get("text", "") for result in evidence_results],
+                expected_keywords,
+            )
         )
 
         case = {
@@ -314,9 +398,28 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
             "top1_page_hit": top1_page_hit,
             "top3_page_hit": top3_page_hit,
             "keyword_hit": keyword_hit,
+            "normalized_keyword_hit": normalized_keyword_hit,
             "results": top_results,
+            "diagnostic_results": diagnostic_results,
         }
-        case["reason"] = _diagnose_failure(case, documents)
+        failed = (
+            top1_source_hit is False
+            or top3_source_hit is False
+            or top1_page_hit is False
+            or top3_page_hit is False
+            or normalized_keyword_hit is False
+        )
+        if failed:
+            case["error_layer"], case["reason"] = _diagnose_failure(
+                item,
+                documents,
+                chunks,
+                diagnostic_results,
+                top_k=top_k,
+            )
+        else:
+            case["error_layer"] = None
+            case["reason"] = None
         cases.append(case)
 
     return {
@@ -338,6 +441,23 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
         "top3_page_total": sum(case["top3_page_hit"] is not None for case in cases),
         "keyword_hits": sum(case["keyword_hit"] is True for case in cases),
         "keyword_total": sum(case["keyword_hit"] is not None for case in cases),
+        "normalized_keyword_hits": sum(
+            case["normalized_keyword_hit"] is True for case in cases
+        ),
+        "normalized_keyword_total": sum(
+            case["normalized_keyword_hit"] is not None for case in cases
+        ),
+        "error_layer_counts": {
+            layer: sum(case["error_layer"] == layer for case in cases)
+            for layer in (
+                "PARSING",
+                "CHUNKING",
+                "RETRIEVAL",
+                "RANKING",
+                "GENERATION",
+                "GT_UNCERTAIN",
+            )
+        },
     }
 
 
@@ -367,7 +487,17 @@ def print_report(report, parser="pymupdf"):
     print(_format_metric("Top-1 source hit", report["top1_source_hits"], report["top1_source_total"]))
     print(_format_metric("Top-3 source hit", report["top3_source_hits"], report["top3_source_total"]))
     print(_format_metric("Evidence/keyword hit", report["keyword_hits"], report["keyword_total"]))
+    print(
+        _format_metric(
+            "Normalized evidence hit",
+            report["normalized_keyword_hits"],
+            report["normalized_keyword_total"],
+        )
+    )
     print("Generation: not evaluated")
+    print("Error layers:")
+    for layer, count in report["error_layer_counts"].items():
+        print(f"- {layer}: {count}")
 
     category_names = sorted({case["category"] for case in report["cases"]})
     if category_names:
@@ -376,24 +506,37 @@ def print_report(report, parser="pymupdf"):
             cases = [case for case in report["cases"] if case["category"] == category]
             page_cases = [case for case in cases if case["top3_page_hit"] is not None]
             keyword_cases = [case for case in cases if case["keyword_hit"] is not None]
+            normalized_keyword_cases = [
+                case for case in cases if case["normalized_keyword_hit"] is not None
+            ]
             page_hits = sum(case["top3_page_hit"] is True for case in page_cases)
             keyword_hits = sum(case["keyword_hit"] is True for case in keyword_cases)
+            normalized_keyword_hits = sum(
+                case["normalized_keyword_hit"] is True
+                for case in normalized_keyword_cases
+            )
             page_metric = f"page Top-3 {page_hits}/{len(page_cases)}" if page_cases else "page Top-3 n/a"
             keyword_metric = (
                 f"keyword {keyword_hits}/{len(keyword_cases)}"
                 if keyword_cases
                 else "keyword n/a"
             )
-            print(f"- {category}: {page_metric}; {keyword_metric}")
+            normalized_keyword_metric = (
+                f"normalized {normalized_keyword_hits}/{len(normalized_keyword_cases)}"
+                if normalized_keyword_cases
+                else "normalized n/a"
+            )
+            print(
+                f"- {category}: {page_metric}; {keyword_metric}; "
+                f"{normalized_keyword_metric}"
+            )
 
     failures = [
         case
         for case in report["cases"]
-        if case["top1_source_hit"] is False
-        or case["top3_source_hit"] is False
-        or case["top1_page_hit"] is False
-        or case["top3_page_hit"] is False
-        or case["keyword_hit"] is False
+        if case["error_layer"] is not None
+        and not case["review_required"]
+        and not case["not_applicable"]
     ]
     if failures:
         print("\nFailed cases:")
@@ -404,6 +547,7 @@ def print_report(report, parser="pymupdf"):
                 print(f"Expected source:\n{case['source']}")
             if case["expected_page"] is not None:
                 print(f"Expected page:\n{case['expected_page']}")
+            print(f"Error layer:\n{case['error_layer']}")
             print(f"Reason:\n{case['reason']}")
             print("Top results:")
             for rank, result in enumerate(case["results"], start=1):
