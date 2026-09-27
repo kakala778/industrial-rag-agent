@@ -22,6 +22,14 @@ Documents
 
 M1 — Minimal Retrieval Pipeline completed.
 
+M1 also includes a batch evaluation script for the curated retrieval test set.
+
+M1 retrieval logic is exposed as a reusable module and reused by M2.
+
+M2 — Basic RAG completed. The CLI retrieves relevant chunks, builds a context
+and prompt, and sends them to the locally configured Qwen3 4B model through
+Ollama.
+
 The current retrieval flow is:
 
 ```text
@@ -88,6 +96,21 @@ The retrieval path keeps embedding and similarity search as separate steps:
 
 Each result contains `score`, `source`, `chunk_id`, and `text`.
 
+### Retrieval Evaluation
+
+Run the batch evaluation from the repository root:
+
+```bash
+python src/evaluate_retrieval.py
+```
+
+The script reads `tests/retrieval_test.json` and reuses the M1 loading,
+chunking, embedding, and retrieval functions. It reports exact source matches
+at Top-1 and Top-3, whether all expected keywords occur in the combined Top-3
+text, and the average score across all returned results. Failed cases include
+their question, expected source, and retrieved sources. The optional `answer`
+field is not evaluated.
+
 ## Experiment
 
 ```text
@@ -109,9 +132,23 @@ Test questions covered:
 - Credit tuition calculations
 - TOEFL score conversion
 
+Batch evaluation snapshot (50 questions):
+
+```text
+Top-1 source hit: 31/50
+Top-3 source hit: 36/50
+Keyword hit: 10/50
+Average retrieved score: 0.7039
+```
+
+This is a baseline for the current documents, test set, chunking, and model; it
+is not a general quality claim. Re-run the script after changing those inputs
+to produce a comparable result.
+
 ## Observations
 
-These are observations from the tested queries, not aggregate benchmark metrics.
+The examples below are manual observations. Use the batch snapshot above for
+the measured retrieval baseline.
 
 ### Successful retrieval examples
 
@@ -130,12 +167,26 @@ These are observations from the tested queries, not aggregate benchmark metrics.
 - Chunking choices directly affect retrieval quality.
 - Source and chunk metadata provide a basis for later citations.
 - The quality of document representation limits the quality of the knowledge base.
+- Separate source and keyword metrics help identify retrieval misses and ranking issues.
 
-## Next Step
+## M2 — Basic RAG
 
-### M2 — Basic RAG
+Run the interactive demo from the repository root:
 
-Add answer generation to the retrieval flow:
+```bash
+python src/rag_demo.py
+```
+
+The demo reuses `retrieval.py` for loading, chunking, embeddings, and Top-K
+retrieval. It formats the retrieved chunks as context, combines that context
+with the question and a grounding-focused system prompt, then calls the local
+Ollama `/api/chat` endpoint with `qwen3:4b`. It does not use a cloud API, add
+answer citations, or implement an Agent.
+
+The three-query local check answered the tuition-formula question from its
+retrieved clause. The transfer-fee and handbook-publisher questions could not
+be answered because their relevant source documents were absent from Top-3;
+these remain retrieval coverage limits.
 
 ```text
 Question
@@ -149,16 +200,16 @@ LLM
 Answer with source
 ```
 
-M2 introduces generation. Agent capabilities remain outside this next milestone.
+M2 adds local answer generation. Agent capabilities remain future work.
 
 ## Roadmap
 
 - [x] Project initialization
 - [x] M1 — Minimal Retrieval Pipeline
-- [ ] M2 — Basic RAG
+- [x] M2 — Basic RAG
 - [ ] PDF ingestion
 - [ ] Source citation
-- [ ] Retrieval evaluation
+- [x] Retrieval evaluation
 - [ ] Agent
 - [ ] Industrial document improvements
 
