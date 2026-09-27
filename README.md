@@ -30,6 +30,10 @@ M2 — Basic RAG completed. The CLI retrieves relevant chunks, builds a context
 and prompt, and sends them to the locally configured Qwen3 4B model through
 Ollama.
 
+M3 — Citation + Retrieval Evaluation completed. The RAG CLI displays the
+retrieved source, chunk ID, and similarity score after each answer. A separate
+10-question retrieval evaluation reports Top-1 and Top-3 source accuracy.
+
 The current retrieval flow is:
 
 ```text
@@ -180,8 +184,10 @@ python src/rag_demo.py
 The demo reuses `retrieval.py` for loading, chunking, embeddings, and Top-K
 retrieval. It formats the retrieved chunks as context, combines that context
 with the question and a grounding-focused system prompt, then calls the local
-Ollama `/api/chat` endpoint with `qwen3:4b`. It does not use a cloud API, add
-answer citations, or implement an Agent.
+Ollama `/api/chat` endpoint with `qwen3:4b`. It does not use a cloud API or
+implement an Agent. M3 adds a `Sources` section after the answer; it lists the
+retrieved source/chunk pairs and scores rather than annotating individual
+answer claims.
 
 The three-query local check answered the tuition-formula question from its
 retrieved clause. The transfer-fee and handbook-publisher questions could not
@@ -202,13 +208,29 @@ Answer with source
 
 M2 adds local answer generation. Agent capabilities remain future work.
 
+## M3 — Citation + Retrieval Evaluation
+
+`src/rag_demo.py` prints each unique retrieved source/chunk pair and its
+similarity score after the generated answer. These sources show which retrieved
+chunks were supplied as context; they are not claim-level citations.
+
+The retrieval-only evaluation in `evaluation/` uses 10 fixed questions from
+`evaluation/qa_dataset.json`. Run it from the repository root:
+
+```bash
+python evaluation/evaluate_retrieval.py
+```
+
+It reuses `src/retrieval.py` and reports exact expected-source matches at
+Top-1 and Top-3. It does not evaluate generated answers.
+
 ## Roadmap
 
 - [x] Project initialization
 - [x] M1 — Minimal Retrieval Pipeline
 - [x] M2 — Basic RAG
 - [ ] PDF ingestion
-- [ ] Source citation
+- [x] M3 — Source citation
 - [x] Retrieval evaluation
 - [ ] Agent
 - [ ] Industrial document improvements
