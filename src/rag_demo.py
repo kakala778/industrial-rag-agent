@@ -1,6 +1,7 @@
 """Minimal Retrieval-Augmented Generation demo using local Ollama."""
 
 import json
+import re
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -25,41 +26,94 @@ else:
     )
 
 
-OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen3:4b"
-SYSTEM_PROMPT = (
-    "你是一个知识库问答助手。\n\n"
-    "请严格根据提供的资料回答问题。\n"
-    "如果资料中没有答案，请明确说明无法从资料中确定。\n"
-    "不要编造不存在的信息。"
-)
+PROMPT_TEMPLATE = """你是一个基于知识库的问答助手。
+
+请严格根据提供的资料回答问题。
+
+规则：
+1. 只能使用资料中的信息回答。
+2. 如果资料中没有明确答案，请回答“根据现有资料无法确定”，不要自行推测。
+3. 回答时尽量简洁准确。
+4. 最后列出参考来源，包括文件名和章节信息。
+
+资料：
+{context}
+
+问题：
+{question}
+
+请回答："""
 
 
-def build_context(results):
-    """Format retrieved chunks with their source names for the prompt."""
+def get_section(result, section_by_chunk=None):
+    """Use available metadata or the heading associated with this chunk."""
+    section = result.get("section")
+    metadata = result.get("metadata") or {}
+    if not section:
+        section = metadata.get("section")
+    if not section and section_by_chunk is not None:
+        section = section_by_chunk.get((result["source"], result.get("chunk_id")))
+    if section:
+        return str(section)
+
+    for line in result["text"].splitlines():
+        match = re.match(r"^#{1,6}\s+(.+?)\s*#*\s*$", line.strip())
+        if match:
+            return match.group(1).strip()
+    return "未标注"
+
+
+def build_section_map(chunks):
+    """Carry each Markdown heading forward to its continuation chunks."""
+    current_sections = {}
+    section_by_chunk = {}
+    heading_pattern = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+
+    for chunk in chunks:
+        source = chunk["source"]
+        section = current_sections.get(source, "未标注")
+        for line in chunk["text"].splitlines():
+            match = heading_pattern.match(line.strip())
+            if match:
+                section = match.group(2).strip()
+        current_sections[source] = section
+        section_by_chunk[(source, chunk["chunk_id"])] = section
+
+    return section_by_chunk
+
+
+def build_context(results, section_by_chunk=None):
+    """Format retrieved chunks with source, section, and page metadata."""
     sections = []
     for result in results:
+        metadata = result.get("metadata") or {}
+        page = metadata.get("page")
+        page_line = f"\n[页码: {page}]" if page is not None else ""
         sections.append(
-            f"Source:\n{result['source']}\n\n"
-            f"Content:\n{result['text']}"
+            f"[来源: {result['source']}]\n"
+            f"[章节: {get_section(result, section_by_chunk)}]{page_line}\n\n"
+            f"内容:\n{result['text']}"
         )
     return "\n\n---\n\n".join(sections)
 
 
 def build_prompt(question, context):
-    """Build the user message containing the retrieved context and question."""
-    return f"参考资料：\n\n{context}\n\n问题：\n\n{question}"
+    """Build the knowledge-grounded prompt for the local generation model."""
+    return PROMPT_TEMPLATE.format(context=context, question=question)
 
 
-def format_sources(results):
-    """Format unique source/chunk pairs with their retrieval scores."""
+def format_sources(results, section_by_chunk=None):
+    """Format unique retrieved sources with section and retrieval metadata."""
     citations = []
     seen = set()
 
     for result in results:
         metadata = result.get("metadata", {})
         page = metadata.get("page")
-        citation_key = (result["source"], page, result["chunk_id"])
+        section = get_section(result, section_by_chunk)
+        citation_key = (result["source"], section, page, result["chunk_id"])
         if citation_key in seen:
             continue
         seen.add(citation_key)
@@ -67,6 +121,7 @@ def format_sources(results):
         citations.append(
             f"[{len(citations) + 1}]\n"
             f"File:\n{result['source']}\n\n"
+            f"Section:\n{section}\n\n"
             f"{page_line}"
             f"Chunk:\n{result['chunk_id']}\n\n"
             f"Score:\n{result['score']:.4f}"
@@ -75,19 +130,15 @@ def format_sources(results):
     return "\n\n".join(citations)
 
 
-def generate_answer(prompt):
-    """Send one non-streaming chat request to the local Ollama API."""
+def call_ollama(prompt):
+    """Send one non-streaming generation request to local Ollama."""
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
+        "prompt": prompt,
         "stream": False,
-        "think": False,
     }
     request = Request(
-        OLLAMA_CHAT_URL,
+        OLLAMA_GENERATE_URL,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -104,7 +155,7 @@ def generate_answer(prompt):
         raise RuntimeError(message) from exc
     except URLError as exc:
         raise RuntimeError(
-            f"Could not connect to Ollama at {OLLAMA_CHAT_URL}: {exc.reason}"
+            f"Could not connect to Ollama at {OLLAMA_GENERATE_URL}: {exc.reason}"
         ) from exc
     except TimeoutError as exc:
         raise RuntimeError("Ollama request timed out after 180 seconds.") from exc
@@ -116,16 +167,18 @@ def generate_answer(prompt):
     if not isinstance(result, dict):
         raise RuntimeError("Ollama returned a JSON response that is not an object.")
 
-    message = result.get("message")
-    if not isinstance(message, dict):
-        raise RuntimeError("Ollama response is missing the 'message' object.")
-    answer = message.get("content")
+    answer = result.get("response")
     if not isinstance(answer, str) or not answer.strip():
-        raise RuntimeError("Ollama response is missing 'message.content'.")
+        raise RuntimeError("Ollama response is missing the 'response' text.")
     answer = answer.strip()
     if "</think>" in answer:
         answer = answer.rsplit("</think>", 1)[-1].strip()
     return answer
+
+
+def generate_answer(prompt):
+    """Keep the existing PDF demo interface while using Ollama generation."""
+    return call_ollama(prompt)
 
 
 def initialize_retriever():
@@ -142,6 +195,7 @@ def initialize_retriever():
 def main():
     try:
         documents, chunks, model, embeddings = initialize_retriever()
+        section_by_chunk = build_section_map(chunks)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -171,10 +225,11 @@ def main():
         for rank, result in enumerate(results, start=1):
             print(f"\nTop {rank}:")
             print(f"source: {result['source']}")
+            print(f"section: {get_section(result, section_by_chunk)}")
             print(f"score: {result['score']:.4f}")
             print(f"chunk_id: {result['chunk_id']}")
 
-        prompt = build_prompt(question, build_context(results))
+        prompt = build_prompt(question, build_context(results, section_by_chunk))
         print("\nGenerating answer...")
         try:
             answer = generate_answer(prompt)
@@ -183,9 +238,9 @@ def main():
             return 1
 
         print(f"\n回答：\n\n{answer}\n")
-        sources = format_sources(results)
+        sources = format_sources(results, section_by_chunk)
         if sources:
-            print(f"Sources:\n\n{sources}\n")
+            print(f"来源：\n\n{sources}\n")
 
     return 0
 

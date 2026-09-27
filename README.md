@@ -1,10 +1,106 @@
 # Industrial RAG Agent
 
-## Goal
+## Project Overview
 
-This is a learning and experimentation project for understanding and building an Industrial RAG + Agent system from scratch. It is not a production system.
+This is a minimal RAG prototype supporting Markdown/PDF document processing,
+vector retrieval, and local LLM generation. It is a learning demo, not an
+industrial-grade RAG system or production service.
 
-## Planned Pipeline
+## Frozen Baseline Status
+
+This checkpoint freezes the current M1–M5 baseline before M6 engineering
+extensions. It includes Markdown and text-based PDF loading, retrieval and
+evaluation, local Ollama generation, RAG context construction, and source/page
+citations. M6 has not started.
+
+## Current Architecture
+
+```text
+PDF / Markdown
+↓
+Document Pipeline
+↓
+Chunk
+↓
+Embedding
+↓
+Retriever
+↓
+Prompt
+↓
+Ollama Qwen3-4B
+↓
+Answer
+```
+
+## Implemented Features
+
+- Markdown and PDF document loading
+- Markdown heading/paragraph-aware chunking
+- Source and page metadata; the RAG CLI carries Markdown heading labels into
+  continuation chunks for context and citation display
+- Sentence Transformers embeddings
+- NumPy cosine-similarity Top-K retrieval
+- Markdown and PDF retrieval evaluation datasets and scripts
+- Local LLM generation through Ollama with `qwen3:4b`
+- Retrieved-source citations in the RAG CLI
+
+## Quick Start
+
+Install the Python dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+If Ollama is not already running, start it in a separate terminal:
+
+```bash
+ollama serve
+```
+
+Download the model:
+
+```bash
+ollama pull qwen3:4b
+```
+
+Run the Markdown RAG demo from the repository root. It reads local `.md` files
+from `examples/docs/`:
+
+```bash
+python src/rag_demo.py
+```
+
+Run the test-set retrieval evaluation:
+
+```bash
+python src/evaluate_retrieval.py
+```
+
+Additional 10-question and PDF retrieval evaluations are available at
+`evaluation/evaluate_retrieval.py` and `evaluation/evaluate_pdf_retrieval.py`.
+The PDF RAG entry point is `python src/pdf_rag_demo.py <path-to-local-pdf>`.
+
+## Current Limitations
+
+This baseline does not include:
+
+- Vector database
+- Reranker
+- Permission and access control
+- Document version management
+- Multi-tenant support
+- Monitoring
+- Agent workflow
+- Memory
+- Web API
+
+PDF loading is text-based. Scanned documents, complex tables, and layout-heavy
+documents are not handled reliably. Real project and teacher-provided data
+must remain out of the repository.
+
+## Long-term Planned Pipeline
 
 ```text
 Documents
@@ -17,42 +113,6 @@ Documents
 → Agent
 → Evaluation
 ```
-
-## Current Status
-
-M1 — Minimal Retrieval Pipeline completed.
-
-M1 also includes a batch evaluation script for the curated retrieval test set.
-
-M1 retrieval logic is exposed as a reusable module and reused by M2.
-
-M2 — Basic RAG completed. The CLI retrieves relevant chunks, builds a context
-and prompt, and sends them to the locally configured Qwen3 4B model through
-Ollama.
-
-M3 — Citation + Retrieval Evaluation completed. The RAG CLI displays the
-retrieved source, chunk ID, and similarity score after each answer. A separate
-10-question retrieval evaluation reports Top-1 and Top-3 source accuracy.
-
-M4.1 PDF loading completed. M4.2 Unified document pipeline completed. Markdown
-and PDF now use the same Document format, and PDF documents can use the existing
-chunking, retrieval, and local RAG flow.
-
-The current retrieval flow is:
-
-```text
-Documents
-↓
-Chunking
-↓
-Embedding
-↓
-Cosine Similarity Retrieval
-↓
-Top-K Results
-```
-
-M1 retrieves and ranks document chunks. It does not generate answers.
 
 ## M1 Implementation
 
@@ -81,7 +141,10 @@ Three approaches were tried:
 3. **Markdown structure-aware splitting (current)**
    - Splits at Markdown heading and paragraph boundaries first.
    - Uses a 500-character window with 80-character overlap for longer sections.
-   - The current implementation retains `source` and `chunk_id`; it does not yet store a separate `section` metadata field.
+   - Chunks retain `source`, `chunk_id`, and document metadata (`source` and
+     `page`). The RAG CLI derives a section label from Markdown headings and
+     carries it into continuation chunks; the retriever does not persist a
+     separate section field.
 
 Current dataset result:
 
@@ -187,11 +250,11 @@ python src/rag_demo.py
 
 The demo reuses `retrieval.py` for loading, chunking, embeddings, and Top-K
 retrieval. It formats the retrieved chunks as context, combines that context
-with the question and a grounding-focused system prompt, then calls the local
-Ollama `/api/chat` endpoint with `qwen3:4b`. It does not use a cloud API or
-implement an Agent. M3 adds a `Sources` section after the answer; it lists the
-retrieved source/chunk pairs and scores rather than annotating individual
-answer claims.
+with the question and a grounding-focused prompt, then calls the local Ollama
+`/api/generate` endpoint with `qwen3:4b`. It does not use a cloud API or
+implement an Agent. The `来源` section lists retrieved files, section labels,
+chunk IDs, and scores; these are context-level sources, not claim-level
+citations.
 
 The three-query local check answered the tuition-formula question from its
 retrieved clause. The transfer-fee and handbook-publisher questions could not
@@ -214,9 +277,9 @@ M2 adds local answer generation. Agent capabilities remain future work.
 
 ## M3 — Citation + Retrieval Evaluation
 
-`src/rag_demo.py` prints each unique retrieved source/chunk pair and its
-similarity score after the generated answer. These sources show which retrieved
-chunks were supplied as context; they are not claim-level citations.
+`src/rag_demo.py` prints each unique retrieved source, section, and chunk with
+its similarity score after the generated answer. These sources show which
+retrieved chunks were supplied as context; they are not claim-level citations.
 
 The retrieval-only evaluation in `evaluation/` uses 10 fixed questions from
 `evaluation/qa_dataset.json`. Run it from the repository root:
@@ -271,6 +334,8 @@ limitations: complex tables, scanned documents, and layout-heavy documents.
 - [x] PDF ingestion
 - [x] M3 — Source citation
 - [x] Retrieval evaluation
+- [x] M5 — Baseline freeze
+- [ ] M6 — Engineering extension
 - [ ] Agent
 - [ ] Industrial document improvements
 
