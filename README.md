@@ -384,6 +384,16 @@ signals possible OCR noise. The 305-page scan was deferred, and complex table
 reconstruction, scanned-page completeness, and human-scored answer correctness
 remain unverified. See the anonymized [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
+A separate nine-page representation audit traced selected evidence through the
+original pages, MinerU Markdown, Middle JSON, unified Documents, chunks, and
+retrieval. It found one table case whose complete evidence survives but ranks
+7 (outside the current Top-3), and another whose expected evidence is already
+incomplete in MinerU output. In one schematic-heavy source, inline image data
+accounts for 94.2% of the extracted text volume. These observations point to
+parsing and representation boundaries for targeted follow-up; they do not
+justify broad retrieval changes. See the anonymized
+[M6 document representation audit](docs/m6-document-representation-audit.md).
+
 ## Roadmap
 
 - [x] Project initialization
