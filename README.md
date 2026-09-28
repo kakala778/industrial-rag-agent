@@ -10,10 +10,10 @@ industrial-grade RAG system or production service.
 
 The `v0.5-local-rag-generation` tag freezes the M1–M5 baseline: Markdown and
 text-based PDF loading, retrieval and evaluation, local Ollama generation,
-RAG context construction, and source/page citations. M6 parser integration is
-under development on its feature branch. A local MinerU pilot has been
-measured, but M6 industrial-document validation remains partial and is not a
-release baseline.
+RAG context construction, and source/page citations. M6 validation is now
+complete as an experimental baseline on eight anonymized local PDFs. This is
+not a production-readiness claim; the expanded measurements and limitations
+are recorded in the [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
 ## Current Architecture
 
@@ -373,16 +373,13 @@ page and source hits, evidence/keyword hits, and failure categories. It does
 not evaluate generated answers.
 
 The adapter and parser selection are smoke-tested with a synthetic scanned
-PDF. A local evaluation then parsed 7 of 8 anonymized PDFs (357 of 662 pages),
-compared PyMuPDF and MinerU on 10 manually checked pilot questions, scored two
-additional table cases separately, and ran 10 local Qwen3 RAG questions. On
-the pilot set, MinerU Top-3 page hit was 6/10 and normalized evidence hit was
-5/10, compared with 3/10 and 2/10 for PyMuPDF. The separate table cases had
-0/2 normalized evidence hits for both parsers. These small, local results are
-not a general quality claim; text-volume expansion on some documents also
-signals possible OCR noise. The 305-page scan was deferred, and complex table
-reconstruction, scanned-page completeness, and human-scored answer correctness
-remain unverified. See the anonymized [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
+PDF. The initial pilot parsed 7 of 8 anonymized PDFs (357 of 662 pages),
+compared PyMuPDF and MinerU on 10 manually checked questions, scored two
+additional table cases separately, and ran 10 local Qwen3 RAG questions.
+MinerU Top-3 page hit was 6/10 and normalized evidence hit was 5/10, compared
+with 3/10 and 2/10 for PyMuPDF. These are historical pilot measurements. The
+expanded validation below subsequently parsed all eight PDFs, including the
+305-page scan, and reports a larger ground-truth set and known limitations.
 
 A separate representation audit traced selected evidence through the original
 pages, MinerU Markdown, Middle JSON, unified Documents, chunks, and retrieval.
@@ -407,8 +404,30 @@ moved from 3 to 4. An 8-case local RAG smoke returned non-empty answers and
 page metadata, but only 6/8 retrieved the expected page in Top-3 and 4/8
 retrieved all expected keywords; generated-answer correctness was not
 human-scored. This is a small local experiment, not a completeness or
-industrial-readiness claim. See the updated
+industrial-readiness claim. These are results of the earlier fixed 12-case
+experiment; the final expanded validation is recorded in the
 [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
+
+### M6 Final Validation
+
+- Scope: 8 anonymized PDFs, 662 pages; all raw page maps are continuous.
+- Dataset: 32 answerable original-PDF-grounded QA and 3 unanswerable generation
+  checks; no cases required ground-truth review.
+- Structured input: 1,594 Documents, 659 non-empty represented pages, 2,996
+  chunks, and 855,152 indexed characters. The three omitted pages were blank in
+  the original PDFs.
+- Retrieval: Top-1/Top-3 source hit 25/32 and 30/32; Top-1/Top-3 page hit
+  9/32 and 15/32; normalized evidence hit 10/32.
+- Failure attribution: PARSING 11, REPRESENTATION 0, CHUNKING 0, RETRIEVAL 4,
+  RANKING 10, INSUFFICIENT_DATA 0, GT_UNCERTAIN 0.
+- RAG: 18 local Qwen3 answers generated with source/page/block citation fields.
+  The question-level review file remains local and requires human review; no
+  answer-accuracy score is claimed.
+
+The 305-page scan completed MinerU Advanced/OCR. Structured Documents and
+chunks contained zero data URI characters. M6 is frozen as a measured
+experimental baseline, not as a production-readiness claim. See the
+[anonymized M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
 ## Roadmap
 
@@ -422,7 +441,7 @@ industrial-readiness claim. See the updated
 - [x] M6 — MinerU parser integration infrastructure
 - [x] M6 — Local pilot A/B and RAG smoke run
 - [x] M6 — Structured MinerU representation experiment
-- [ ] M6 — Broader original-PDF-grounded QA and large-scan validation
+- [x] M6 — Broader original-PDF-grounded QA and large-scan validation
 - [ ] Agent
 - [ ] Industrial document improvements
 

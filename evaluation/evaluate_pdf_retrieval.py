@@ -18,9 +18,13 @@ CATEGORIES = {
     "text",
     "numeric",
     "unit",
+    "model",
     "table",
+    "simple_table",
+    "complex_table",
     "ocr",
     "layout",
+    "drawing_layout",
     "similar_field",
     "multi_fact",
     "unanswerable",
@@ -205,7 +209,14 @@ def _contains_keywords_in_texts(texts, keywords):
     )
 
 
-def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
+def _diagnose_failure(
+    item,
+    documents,
+    chunks,
+    diagnostic_results,
+    top_k=TOP_K,
+    representation_reference_documents=None,
+):
     """Classify a miss without inferring parsing failures from absent inputs."""
     keywords = item.get("expected_keywords", [])
     if item.get("review_required", False):
@@ -217,11 +228,34 @@ def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
             document for document in documents if _matches_case_scope(item, document)
         ]
         if not scoped_documents:
+            reference_documents = [
+                document
+                for document in (representation_reference_documents or [])
+                if _matches_case_scope(item, document)
+            ]
+            if reference_documents:
+                return (
+                    "REPRESENTATION",
+                    "The source/page exists in the flat MinerU reference but not in the selected representation.",
+                )
             return "PARSING", "The expected source/page is absent from loaded documents."
 
         if keywords and not _contains_keywords_in_texts(
             [document.get("text", "") for document in scoped_documents], keywords
         ):
+            reference_documents = [
+                document
+                for document in (representation_reference_documents or [])
+                if _matches_case_scope(item, document)
+            ]
+            if reference_documents and _contains_keywords_in_texts(
+                [document.get("text", "") for document in reference_documents],
+                keywords,
+            ):
+                return (
+                    "REPRESENTATION",
+                    "Expected evidence is present in the flat MinerU reference but missing from the selected representation.",
+                )
             return "PARSING", "Expected evidence is missing from the loaded source/page text."
 
     scoped_chunks = [chunk for chunk in chunks if _matches_case_scope(item, chunk)]
@@ -287,7 +321,15 @@ def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
     return "RETRIEVAL", "Expected evidence exists in chunks but was not retrieved in Top-10."
 
 
-def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, documents=None):
+def evaluate_questions(
+    questions,
+    model,
+    chunks,
+    embeddings,
+    top_k=TOP_K,
+    documents=None,
+    representation_reference_documents=None,
+):
     """Measure source/page hits and raw keyword hits without evaluating generation."""
     cases = []
 
@@ -441,6 +483,7 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                 chunks,
                 diagnostic_results,
                 top_k=top_k,
+                representation_reference_documents=representation_reference_documents,
             )
         else:
             case["error_layer"] = None
@@ -476,11 +519,11 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
             layer: sum(case["error_layer"] == layer for case in cases)
             for layer in (
                 "PARSING",
+                "REPRESENTATION",
                 "CHUNKING",
                 "RETRIEVAL",
                 "RANKING",
                 "INSUFFICIENT_DATA",
-                "GENERATION",
                 "GT_UNCERTAIN",
             )
         },
@@ -501,6 +544,11 @@ def print_report(report, parser="pymupdf"):
     print(f"Documents: {report['documents']}")
     print(f"Chunks: {report['chunks']}")
     print(f"Load/parse time (cache included): {report['parse_seconds']:.2f}s")
+    if report.get("representation_reference_loaded"):
+        print(
+            "Representation diagnostic reference: flat MinerU documents "
+            f"({report['representation_reference_seconds']:.2f}s; no embeddings)"
+        )
     print(f"Empty documents: {report['empty_documents']}")
     print(f"Representation: {report['representation']}")
     print(f"Indexed text characters: {report['text_characters']}")
@@ -554,9 +602,11 @@ def print_report(report, parser="pymupdf"):
                 if normalized_keyword_cases
                 else "normalized n/a"
             )
+            sample_size = len(page_cases)
+            sample_note = "; small sample" if sample_size < 5 else ""
             print(
-                f"- {category}: {page_metric}; {keyword_metric}; "
-                f"{normalized_keyword_metric}"
+                f"- {category}: n={sample_size}; {page_metric}; {keyword_metric}; "
+                f"{normalized_keyword_metric}{sample_note}"
             )
 
     failures = [
@@ -637,6 +687,20 @@ def main():
             representation=args.representation,
         )
         parse_seconds = time.perf_counter() - parse_started
+        representation_reference_documents = None
+        representation_reference_seconds = 0.0
+        if args.parser == "mineru" and args.representation == "structured":
+            reference_started = time.perf_counter()
+            representation_reference_documents = load_pdf_documents(
+                args.pdf_dir,
+                questions,
+                pdf_path=args.pdf,
+                parser=args.parser,
+                force=False,
+                runner_path=args.mineru_runner,
+                representation="flat",
+            )
+            representation_reference_seconds = time.perf_counter() - reference_started
         chunks = split_documents(documents)
         if chunks:
             model = load_model()
@@ -650,6 +714,7 @@ def main():
             chunks,
             embeddings,
             documents=documents,
+            representation_reference_documents=representation_reference_documents,
         )
     except (OSError, RuntimeError, ValueError, KeyError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -669,6 +734,8 @@ def main():
             "documents": len(documents),
             "chunks": len(chunks),
             "parse_seconds": parse_seconds,
+            "representation_reference_loaded": representation_reference_documents is not None,
+            "representation_reference_seconds": representation_reference_seconds,
             "empty_documents": sum(
                 not document.get("text", "").strip() for document in documents
             ),

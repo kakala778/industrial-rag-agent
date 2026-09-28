@@ -27,6 +27,127 @@ class FixedModel:
 
 
 class PdfEvaluationTests(unittest.TestCase):
+    def test_accepts_expanded_m6_categories(self):
+        dataset = [
+            {
+                "question": "What is shown in the drawing?",
+                "expected_source": "drawing.pdf",
+                "expected_page": 1,
+                "expected_keywords": ["DRAWING-VALUE-Z9"],
+                "category": "drawing_layout",
+            },
+            {
+                "question": "Which material belongs to this row?",
+                "expected_source": "schedule.pdf",
+                "expected_page": 2,
+                "expected_keywords": ["MATERIAL-VALUE-Z9"],
+                "category": "complex_table",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "industrial_qa.json"
+            path.write_text(json.dumps(dataset, ensure_ascii=False), encoding="utf-8")
+
+            questions = load_questions(path)
+
+        self.assertEqual(
+            [item["category"] for item in questions],
+            ["drawing_layout", "complex_table"],
+        )
+
+    def test_rejects_multisource_dataset_when_one_pdf_is_selected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            selected_pdf = Path(temp_dir) / "selected.pdf"
+            selected_pdf.write_bytes(b"pdf placeholder")
+            questions = [
+                {"question": "Q1", "expected_source": "selected.pdf"},
+                {"question": "Q2", "expected_source": "another.pdf"},
+            ]
+
+            with patch("evaluation.evaluate_pdf_retrieval.load_pdf") as load_pdf:
+                with self.assertRaisesRegex(ValueError, "single-source dataset"):
+                    load_pdf_documents(
+                        temp_dir,
+                        questions,
+                        pdf_path=selected_pdf,
+                    )
+
+        load_pdf.assert_not_called()
+
+    def test_missing_documents_do_not_create_parsing_attribution(self):
+        item = {
+            "question": "Where is the expected limit stated?",
+            "expected_source": "manual.pdf",
+            "expected_page": 2,
+            "expected_keywords": ["0.82 MPa"],
+            "category": "numeric",
+        }
+        chunks = [
+            {
+                "source": "manual.pdf",
+                "text": "The specified limit is 0.82 MPa.",
+                "metadata": {"source": "manual.pdf", "page": 2},
+            }
+        ]
+
+        layer, _reason = _diagnose_failure(item, None, chunks, [])
+
+        self.assertEqual(layer, "RETRIEVAL")
+
+    def test_missing_documents_with_incomplete_scoped_chunks_are_insufficient_data(self):
+        item = {
+            "question": "Where is the expected limit stated?",
+            "expected_source": "manual.pdf",
+            "expected_page": 2,
+            "expected_keywords": ["0.82 MPa"],
+            "category": "numeric",
+        }
+        chunks = [
+            {
+                "source": "manual.pdf",
+                "text": "A chunk exists for the expected page but has no limit value.",
+                "metadata": {"source": "manual.pdf", "page": 2},
+            }
+        ]
+
+        layer, _reason = _diagnose_failure(item, None, chunks, [])
+
+        self.assertEqual(layer, "INSUFFICIENT_DATA")
+
+    def test_structured_miss_present_in_flat_reference_is_representation(self):
+        item = {
+            "question": "What is the specified row value?",
+            "expected_source": "manual.pdf",
+            "expected_page": 2,
+            "expected_keywords": ["SAMPLE-MATERIAL-Z9", "SAMPLE-VALUE-Z9"],
+            "category": "complex_table",
+        }
+        documents = [
+            {
+                "text": "The table row is present but its cells were not retained.",
+                "metadata": {"source": "manual.pdf", "page": 2},
+            }
+        ]
+        flat_documents = [
+            {
+                "text": (
+                    "ASSEMBLY-TEST-A | SECTION-TEST-B | SAMPLE-MATERIAL-Z9 | "
+                    "SAMPLE-VALUE-Z9 | COUNT-TEST-3"
+                ),
+                "metadata": {"source": "manual.pdf", "page": 2},
+            }
+        ]
+
+        layer, _reason = _diagnose_failure(
+            item,
+            documents,
+            [],
+            [],
+            representation_reference_documents=flat_documents,
+        )
+
+        self.assertEqual(layer, "REPRESENTATION")
+
     def test_page_label_requires_expected_source(self):
         dataset = [
             {

@@ -15,9 +15,9 @@ anonymous IDs for this local run; their mapping is not committed.
   PDF page images. No case required review before scoring.
 - Ran 10 local RAG questions through retrieval, context construction, and
   Ollama `qwen3:4b` generation. The saved answers are local-only.
-- Parsed 7 of 8 source PDFs (357 of 662 pages). `doc_05` was skipped: it has
-  305 pages and no text in the PyMuPDF baseline, so a full OCR run was
-  deferred due to runtime cost.
+- At this interim pilot snapshot, 7 of 8 source PDFs (357 of 662 pages) were
+  parsed. `doc_05` was deferred at that point due to its 305-page scan and
+  runtime cost. The final expanded validation below supersedes that status.
 
 ## Page Parsing Statistics
 
@@ -170,12 +170,142 @@ supports structured representation as the default input form, but does not
 justify reranker, hybrid search, or embedding changes. Broader original-PDF
 QA and the deferred large scan remain outside this experiment.
 
-## M6 Status and Follow-up
+## Final M6 Validation and Freeze Decision
 
-The local MinerU adapter, page mapping, cache reuse, 10-question pilot, paired
-flat/structured representation evaluation, and 8-case structured RAG smoke
-are verified for this local sample. M6 industrial-document validation remains
-partial. Next work should expand only the original-PDF-grounded QA set and
-investigate the observed table/layout extraction and text-expansion failures.
-Retrieval, chunking, embedding, and generation algorithms were not changed as
-part of this evaluation.
+This expanded validation kept MinerU version/tier/OCR mode, structured
+representation, chunking, embedding model, cosine retrieval, Top-K, Qwen3 model,
+and RAG prompt fixed. Ground truth was checked against original PDF page images.
+The question set, source mapping, parser outputs, and generated answer logs
+remain outside this repository.
+
+### Scope and Dataset
+
+- Eight anonymized PDFs covering 662 original pages were validated.
+- All eight cached Middle JSON page maps are continuous and match source page
+  counts. The structured loader emitted 1,594 Documents across 659 non-empty
+  pages and 2,996 chunks, with 855,152 indexed characters.
+- The three pages without structured Documents were visually confirmed blank in
+  the original PDFs; they are not counted as extracted content.
+- The local QA set contains 32 visually verified, answerable cases and 3
+  unanswerable generation checks. No case required ground-truth review. The
+  unanswerable cases are excluded from retrieval metrics.
+- Category counts: text 2; numeric 4; unit 4; model 1; OCR 2; legacy table 6;
+  simple table 1; complex table 4; drawing/layout 3; similar field 1;
+  multi-fact 4; unanswerable 3. Categories with fewer than five scored cases
+  are small samples.
+
+### Large Scan Validation
+
+`doc_05` was parsed successfully by MinerU 4.0.5 Advanced/OCR in 1,770.49
+seconds. All 305 raw page records were present with continuous zero-based page
+indices; the structured loader represented pages 1–305 in 591 Documents and
+1,190 chunks (339,844 indexed characters). Original PDF pages 1, 153, and 305
+were visually spot-checked for the beginning, middle, and end. A cache reload
+reproduced the same Documents while the parser invocation was explicitly
+blocked. Data URI characters were zero in its Documents and chunks.
+
+### Retrieval Metrics
+
+| Metric | Result |
+| --- | ---: |
+| Top-1 source hit | 25/32 |
+| Top-3 source hit | 30/32 |
+| Top-1 page hit | 9/32 |
+| Top-3 page hit | 15/32 |
+| Raw evidence/keyword hit | 8/32 |
+| Normalized evidence hit | 10/32 |
+
+Source hit does not imply that the expected page or evidence was retrieved.
+The page and normalized-evidence metrics are the more useful signals for this
+dataset.
+
+### Category Metrics
+
+| Category | n | Top-3 page hit | Normalized evidence hit | Note |
+| --- | ---: | ---: | ---: | --- |
+| Text | 2 | 1/2 | 1/2 | small sample |
+| Numeric | 4 | 1/4 | 1/4 | small sample |
+| Unit | 4 | 1/4 | 0/4 | small sample |
+| Numeric + unit combined | 8 | 2/8 | 1/8 | — |
+| Model / identifier | 1 | 0/1 | 0/1 | small sample |
+| OCR | 2 | 0/2 | 0/2 | small sample |
+| Legacy table | 6 | 4/6 | 3/6 | — |
+| Simple table | 1 | 0/1 | 0/1 | small sample |
+| Complex table | 4 | 3/4 | 3/4 | small sample |
+| All table categories combined | 11 | 7/11 | 6/11 | — |
+| Drawing / layout | 3 | 3/3 | 1/3 | small sample |
+| Similar field | 1 | 0/1 | 0/1 | small sample |
+| Multi-fact | 4 | 2/4 | 1/4 | small sample |
+| Unanswerable | 0 | n/a | n/a | not scored for retrieval |
+
+Small category counts are descriptive only and do not support broad category
+quality claims.
+
+### Failure Attribution
+
+Each of the 25 failed formal cases receives one primary diagnostic label:
+
+| Layer | Cases |
+| --- | ---: |
+| PARSING | 11 |
+| REPRESENTATION | 0 |
+| CHUNKING | 0 |
+| RETRIEVAL | 4 |
+| RANKING | 10 |
+| INSUFFICIENT_DATA | 0 |
+| GT_UNCERTAIN | 0 |
+
+No representation- or chunking-layer loss was observed in this scored set.
+Parsing is the largest single failure group, with ranking close behind. The
+diagnostic evaluator compares the selected structured Documents with flat
+MinerU reference Documents to avoid labeling representation losses as parsing
+failures. When raw Documents are omitted, it reports insufficient evidence
+instead of inventing a parsing attribution. A single-PDF run also rejects a
+multi-source QA set.
+
+### RAG Answer and Citation Review
+
+Eighteen representative questions were run through the existing retrieval,
+prompt, and local Ollama `qwen3:4b` path. All 18 generations completed. The set
+contains 15 answerable questions and 3 unanswerable checks. The unanswerable
+answers contained the configured refusal wording in 3/3 cases; this is an
+automatic phrase check only and is not a semantic correctness score.
+
+The private review file contains each prompt, ground truth, retrieved Top-3
+evidence, generated answer, and citation. All 18 records are marked
+`human_review_required: true`; answer and citation correctness remain pending
+human review. All 54 displayed retrieval citations include source, page,
+block type, and block index. In the 15 answerable samples, 5 retrieved Top-3
+sets contained all expected evidence keywords on the expected page, and 6
+included the expected source/page. These retrieval diagnostics do not score
+generated-answer correctness.
+
+### Regression and Limitations
+
+- Structured Documents and chunks contained zero data URI characters.
+- All raw parser page maps were continuous across the eight source PDFs.
+- The full-scan OCR sample yielded all five expected facts into Documents and
+  chunks; its retrieval outcomes were 2 passes, 2 ranking misses, and 1
+  retrieval miss. This is a small spot-checked sample, not a completeness claim.
+- Top-3 page hit was 15/32 and normalized evidence hit was 10/32. Several
+  table/layout cases still miss or rank below the cutoff.
+- Generated answers have not been human-scored. The local review file must be
+  checked before making answer-quality claims.
+
+### M6 Conclusion and Next-Stage Evidence
+
+**M6 freeze decision: READY.** This means the MinerU-backed structured PDF
+pipeline is stable enough to preserve as an experimental baseline: caches and
+page mappings are reproducible, the large scan completed, 32 original-PDF
+ground-truth cases cover all eight sources, retrieval metrics and failure
+layers are recorded, and representative RAG outputs are prepared for human
+review. It does not mean production readiness or high retrieval accuracy.
+
+The largest observed failure group is PARSING (11/25), followed closely by
+RANKING (10/25), then RETRIEVAL (4/25); REPRESENTATION and CHUNKING each remain
+at zero in this sample. Evidence supports a future focused parsing/table/layout
+investigation first and a controlled ranking experiment as a secondary
+candidate. The 10 ranking cases make reranking worth evaluating later, but do
+not justify adding it in this M6 freeze. No M7 component was implemented, and
+retrieval, chunking, embeddings, generation, and prompt behavior were not
+changed.
