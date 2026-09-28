@@ -118,6 +118,7 @@ def load_pdf_documents(
     parser="pymupdf",
     force=False,
     runner_path=None,
+    representation="structured",
 ):
     """Load the one requested PDF or legacy dataset sources through a parser."""
     expected_sources = {
@@ -128,6 +129,12 @@ def load_pdf_documents(
         selected_pdf = Path(pdf_path)
         if not selected_pdf.is_file():
             raise FileNotFoundError(f"PDF file not found: {selected_pdf}")
+        if len(expected_sources) > 1:
+            raise ValueError(
+                "--pdf accepts a single-source dataset, but this dataset references "
+                f"multiple sources: {', '.join(sorted(expected_sources))}. "
+                "Use --pdf-dir for a multi-source dataset or select a single-source dataset."
+            )
         if expected_sources and selected_pdf.name not in expected_sources:
             raise FileNotFoundError(
                 f"The dataset expects source(s) {', '.join(sorted(expected_sources))}, "
@@ -138,6 +145,7 @@ def load_pdf_documents(
             parser=parser,
             force=force,
             runner_path=runner_path,
+            representation=representation,
         )
 
     pdf_dir = Path(pdf_dir)
@@ -164,6 +172,7 @@ def load_pdf_documents(
                 parser=parser,
                 force=force,
                 runner_path=runner_path,
+                representation=representation,
             )
         )
     return documents
@@ -197,29 +206,46 @@ def _contains_keywords_in_texts(texts, keywords):
 
 
 def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
-    """Classify a retrieval miss using loaded pages, chunks, and Top-10 rank."""
+    """Classify a miss without inferring parsing failures from absent inputs."""
     keywords = item.get("expected_keywords", [])
     if item.get("review_required", False):
         return "GT_UNCERTAIN", "Ground truth requires human review."
 
-    scoped_documents = [
-        document for document in documents if _matches_case_scope(item, document)
-    ]
-    if not scoped_documents:
-        return "PARSING", "The expected source/page is absent from loaded documents."
+    documents_available = documents is not None
+    if documents_available:
+        scoped_documents = [
+            document for document in documents if _matches_case_scope(item, document)
+        ]
+        if not scoped_documents:
+            return "PARSING", "The expected source/page is absent from loaded documents."
 
-    if keywords and not _contains_keywords_in_texts(
-        [document.get("text", "") for document in scoped_documents], keywords
-    ):
-        return "PARSING", "Expected evidence is missing from the loaded source/page text."
+        if keywords and not _contains_keywords_in_texts(
+            [document.get("text", "") for document in scoped_documents], keywords
+        ):
+            return "PARSING", "Expected evidence is missing from the loaded source/page text."
 
     scoped_chunks = [chunk for chunk in chunks if _matches_case_scope(item, chunk)]
     if keywords and not scoped_chunks:
+        if not documents_available:
+            return (
+                "INSUFFICIENT_DATA",
+                "Raw documents were not provided, so parsing and chunking cannot be distinguished.",
+            )
         return "CHUNKING", "Loaded source/page evidence did not produce any chunks."
     if keywords and not _contains_keywords_in_texts(
         [chunk.get("text", "") for chunk in scoped_chunks], keywords
     ):
+        if not documents_available:
+            return (
+                "INSUFFICIENT_DATA",
+                "Raw documents were not provided, so missing chunk evidence cannot be attributed to parsing or chunking.",
+            )
         return "CHUNKING", "Expected evidence was lost while splitting the source/page into chunks."
+    if not documents_available and not scoped_chunks:
+        return (
+            "INSUFFICIENT_DATA",
+            "Raw documents were not provided, so the missing source/page cannot be attributed to parsing.",
+        )
 
     scoped_diagnostic_results = [
         result
@@ -263,7 +289,6 @@ def _diagnose_failure(item, documents, chunks, diagnostic_results, top_k=TOP_K):
 
 def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, documents=None):
     """Measure source/page hits and raw keyword hits without evaluating generation."""
-    documents = documents or []
     cases = []
 
     for item in questions:
@@ -454,6 +479,7 @@ def evaluate_questions(questions, model, chunks, embeddings, top_k=TOP_K, docume
                 "CHUNKING",
                 "RETRIEVAL",
                 "RANKING",
+                "INSUFFICIENT_DATA",
                 "GENERATION",
                 "GT_UNCERTAIN",
             )
@@ -471,11 +497,13 @@ def print_report(report, parser="pymupdf"):
     """Print overall, category, and failure details for a retrieval run."""
     print("PDF Retrieval Evaluation")
     print(f"Parser: {parser}")
-    print(f"Pages/documents: {report['documents']}")
+    print(f"Pages represented: {report['pages']}")
+    print(f"Documents: {report['documents']}")
     print(f"Chunks: {report['chunks']}")
     print(f"Load/parse time (cache included): {report['parse_seconds']:.2f}s")
-    print(f"Empty pages: {report['empty_pages']}")
-    print(f"Text characters: {report['text_characters']}")
+    print(f"Empty documents: {report['empty_documents']}")
+    print(f"Representation: {report['representation']}")
+    print(f"Indexed text characters: {report['text_characters']}")
     print(
         f"Questions: {report['total']} "
         f"(evaluated: {report['evaluated_total']}; "
@@ -582,6 +610,12 @@ def build_argument_parser():
         default="pymupdf",
         help="Parser to evaluate (default: pymupdf baseline)",
     )
+    parser.add_argument(
+        "--representation",
+        choices=("structured", "flat"),
+        default="structured",
+        help="MinerU representation to evaluate (default: structured)",
+    )
     parser.add_argument("--force-parse", action="store_true")
     parser.add_argument("--mineru-runner", type=Path)
     return parser
@@ -600,6 +634,7 @@ def main():
             parser=args.parser,
             force=args.force_parse,
             runner_path=args.mineru_runner,
+            representation=args.representation,
         )
         parse_seconds = time.perf_counter() - parse_started
         chunks = split_documents(documents)
@@ -622,11 +657,23 @@ def main():
 
     report.update(
         {
+            "pages": len(
+                {
+                    (
+                        (document.get("metadata") or {}).get("source"),
+                        (document.get("metadata") or {}).get("page"),
+                    )
+                    for document in documents
+                }
+            ),
             "documents": len(documents),
             "chunks": len(chunks),
             "parse_seconds": parse_seconds,
-            "empty_pages": sum(not document.get("text", "").strip() for document in documents),
+            "empty_documents": sum(
+                not document.get("text", "").strip() for document in documents
+            ),
             "text_characters": sum(len(document.get("text", "")) for document in documents),
+            "representation": args.representation if args.parser == "mineru" else "n/a",
         }
     )
     print_report(report, parser=args.parser)

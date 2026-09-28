@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -11,6 +12,7 @@ from evaluation.evaluate_pdf_retrieval import (
     _diagnose_failure,
     build_argument_parser,
     evaluate_questions,
+    load_pdf_documents,
     load_questions,
 )
 
@@ -311,6 +313,84 @@ class PdfEvaluationTests(unittest.TestCase):
         self.assertEqual(args.pdf, Path("manual.pdf"))
         self.assertEqual(args.dataset, Path("qa.json"))
         self.assertEqual(args.parser, "mineru")
+
+    def test_single_pdf_rejects_a_dataset_with_multiple_sources(self):
+        questions = [
+            {"question": "Question for the selected PDF?", "source": "target.pdf"},
+            {"question": "Question for another PDF?", "source": "other.pdf"},
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            selected_pdf = Path(temp_dir) / "target.pdf"
+            selected_pdf.write_bytes(b"test PDF")
+            with patch("evaluation.evaluate_pdf_retrieval.load_pdf") as load_pdf:
+                with self.assertRaisesRegex(ValueError, "multiple sources"):
+                    load_pdf_documents(
+                        temp_dir,
+                        questions,
+                        pdf_path=selected_pdf,
+                    )
+                load_pdf.assert_not_called()
+
+    def test_missing_documents_does_not_misattribute_a_ranking_miss_to_parsing(self):
+        question = {
+            "question": "Where is alpha documented?",
+            "expected_source": "target.pdf",
+            "expected_page": 1,
+            "expected_keywords": ["alpha"],
+        }
+        chunks = [
+            {
+                "source": "other.pdf",
+                "chunk_id": 0,
+                "text": "unrelated",
+                "metadata": {"source": "other.pdf", "page": 1},
+            },
+            {
+                "source": "target.pdf",
+                "chunk_id": 1,
+                "text": "alpha is documented here",
+                "metadata": {"source": "target.pdf", "page": 1},
+            },
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.9, 0.1]], dtype=np.float32)
+
+        report = evaluate_questions(
+            [question],
+            FixedModel(),
+            chunks,
+            embeddings,
+            top_k=1,
+        )
+
+        self.assertEqual(report["cases"][0]["error_layer"], "RANKING")
+
+    def test_missing_documents_reports_insufficient_data_when_chunk_evidence_is_absent(self):
+        question = {
+            "question": "Where is alpha documented?",
+            "expected_source": "target.pdf",
+            "expected_page": 1,
+            "expected_keywords": ["alpha"],
+        }
+        chunks = [
+            {
+                "source": "target.pdf",
+                "chunk_id": 0,
+                "text": "target page with unrelated notes",
+                "metadata": {"source": "target.pdf", "page": 1},
+            }
+        ]
+        embeddings = np.array([[1.0, 0.0]], dtype=np.float32)
+
+        report = evaluate_questions(
+            [question],
+            FixedModel(),
+            chunks,
+            embeddings,
+        )
+
+        self.assertEqual(
+            report["cases"][0]["error_layer"], "INSUFFICIENT_DATA"
+        )
 
     def test_review_required_questions_are_not_evaluated_or_counted(self):
         questions = [

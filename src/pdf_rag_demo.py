@@ -26,6 +26,7 @@ def initialize_pdf_retriever(
     *,
     force_parse=False,
     mineru_runner=None,
+    representation="structured",
 ):
     """Load, chunk, and embed a PDF once for this demo session."""
     documents = load_pdf(
@@ -33,6 +34,7 @@ def initialize_pdf_retriever(
         parser=parser,
         force=force_parse,
         runner_path=mineru_runner,
+        representation=representation,
     )
     chunks = split_documents(documents)
     if not chunks:
@@ -63,6 +65,12 @@ def build_argument_parser():
         type=Path,
         help="Path to run-mineru.ps1 (otherwise use MINERU_RUNNER_PATH/default)",
     )
+    parser.add_argument(
+        "--representation",
+        choices=("structured", "flat"),
+        default="structured",
+        help="MinerU document representation (default: structured; flat is for comparison)",
+    )
     return parser
 
 
@@ -75,13 +83,27 @@ def main():
             parser=args.parser,
             force_parse=args.force_parse,
             mineru_runner=args.mineru_runner,
+            representation=args.representation,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     print(f"Parser: {args.parser}")
-    print(f"Loaded {len(documents)} PDF pages into {len(chunks)} chunks.")
+    if args.parser == "mineru":
+        print(f"Representation: {args.representation}")
+    represented_pages = {
+        (
+            (document.get("metadata") or {}).get("source"),
+            (document.get("metadata") or {}).get("page"),
+        )
+        for document in documents
+        if (document.get("metadata") or {}).get("page") is not None
+    }
+    print(
+        f"Loaded {len(documents)} documents across {len(represented_pages)} "
+        f"represented PDF pages into {len(chunks)} chunks."
+    )
 
     while True:
         try:

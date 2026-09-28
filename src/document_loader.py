@@ -20,8 +20,9 @@ def load_pdf(
     runner_path=None,
     cache_root=None,
     powershell_executable=None,
+    representation="structured",
 ):
-    """Return one document per PDF page, with a 1-based page number."""
+    """Load PDF content as unified documents with 1-based page metadata."""
     if parser == "mineru":
         return mineru_loader.load_pdf_with_mineru(
             path,
@@ -29,6 +30,7 @@ def load_pdf(
             runner_path=runner_path,
             cache_root=cache_root,
             powershell_executable=powershell_executable,
+            representation=representation,
         )
     if parser != "pymupdf":
         raise ValueError(
