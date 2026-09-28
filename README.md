@@ -384,15 +384,31 @@ signals possible OCR noise. The 305-page scan was deferred, and complex table
 reconstruction, scanned-page completeness, and human-scored answer correctness
 remain unverified. See the anonymized [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
-A separate nine-page representation audit traced selected evidence through the
-original pages, MinerU Markdown, Middle JSON, unified Documents, chunks, and
-retrieval. It found one table case whose complete evidence survives but ranks
-7 (outside the current Top-3), and another whose expected evidence is already
-incomplete in MinerU output. In one schematic-heavy source, inline image data
-accounts for 94.2% of the extracted text volume. These observations point to
-parsing and representation boundaries for targeted follow-up; they do not
-justify broad retrieval changes. See the anonymized
+A separate representation audit traced selected evidence through the original
+pages, MinerU Markdown, Middle JSON, unified Documents, chunks, and retrieval.
+It found one table case whose complete evidence survives but ranks 7 (outside
+the current Top-3), and another whose expected evidence is already incomplete
+in MinerU output. In the legacy flat representation, inline image data
+accounted for 94.2% of one schematic-heavy source's text volume. These
+observations point to parsing and representation boundaries for targeted
+follow-up; they do not justify broad retrieval changes. See the anonymized
 [M6 document representation audit](docs/m6-document-representation-audit.md).
+
+The MinerU adapter now defaults to a block-aware structured representation;
+`--representation flat` remains available for controlled comparison. On the
+same cached MinerU outputs and fixed 10-question pilot plus two table cases,
+structured representation reduced indexed text from 1,990,067 to 452,103
+characters and chunks from 4,811 to 1,512; a separate scan found no image data
+URI or `base64,` markers in structured documents or chunks. Top-3 page hits
+improved from 6/12 to 8/12 and normalized Top-3
+evidence hits from 5/12 to 6/12; Top-1 page hits stayed 5/12. The complete
+evidence for one table case remains outside Top-3, and one OCR evidence rank
+moved from 3 to 4. An 8-case local RAG smoke returned non-empty answers and
+page metadata, but only 6/8 retrieved the expected page in Top-3 and 4/8
+retrieved all expected keywords; generated-answer correctness was not
+human-scored. This is a small local experiment, not a completeness or
+industrial-readiness claim. See the updated
+[M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
 ## Roadmap
 
@@ -405,6 +421,7 @@ justify broad retrieval changes. See the anonymized
 - [x] M5 — Baseline freeze
 - [x] M6 — MinerU parser integration infrastructure
 - [x] M6 — Local pilot A/B and RAG smoke run
+- [x] M6 — Structured MinerU representation experiment
 - [ ] M6 — Broader original-PDF-grounded QA and large-scan validation
 - [ ] Agent
 - [ ] Industrial document improvements
