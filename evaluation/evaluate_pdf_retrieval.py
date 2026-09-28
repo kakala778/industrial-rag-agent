@@ -109,6 +109,18 @@ def _expected_source(item):
     return item.get("expected_source", item.get("source"))
 
 
+def _requires_retrieval_scoring(item):
+    """Share the scoring eligibility rule between loading and evaluation."""
+    if item.get("review_required", False):
+        return False
+    return not (
+        _expected_source(item) is None
+        and item.get("expected_page") is None
+        and not item.get("expected_keywords", [])
+        and item.get("category", item.get("type", "text")) == "unanswerable"
+    )
+
+
 def _normalize_evidence_text(text):
     normalized = unicodedata.normalize("NFKC", text).casefold()
     return re.sub(r"\s+", "", normalized)
@@ -128,6 +140,10 @@ def load_pdf_documents(
     expected_sources = {
         source for item in questions if (source := _expected_source(item)) is not None
     }
+    unscoped_scored_count = sum(
+        _expected_source(item) is None and _requires_retrieval_scoring(item)
+        for item in questions
+    )
 
     if pdf_path is not None:
         selected_pdf = Path(pdf_path)
@@ -138,6 +154,11 @@ def load_pdf_documents(
                 "--pdf accepts a single-source dataset, but this dataset references "
                 f"multiple sources: {', '.join(sorted(expected_sources))}. "
                 "Use --pdf-dir for a multi-source dataset or select a single-source dataset."
+            )
+        if unscoped_scored_count:
+            raise ValueError(
+                "--pdf requires an expected_source for every scored question. "
+                f"Found {unscoped_scored_count} question(s) without one."
             )
         if expected_sources and selected_pdf.name not in expected_sources:
             raise FileNotFoundError(
@@ -160,13 +181,17 @@ def load_pdf_documents(
     if not available:
         raise FileNotFoundError(f"No PDF files found in: {pdf_dir}")
 
-    selected_sources = expected_sources or set(available)
-    missing_sources = sorted(selected_sources - available.keys())
+    missing_sources = sorted(expected_sources - available.keys())
     if missing_sources:
         raise FileNotFoundError(
             "PDF files referenced by the dataset are missing from "
             f"{pdf_dir}: {', '.join(missing_sources)}"
         )
+    selected_sources = (
+        set(available)
+        if unscoped_scored_count or not expected_sources
+        else expected_sources
+    )
 
     documents = []
     for source in sorted(selected_sources):
@@ -321,175 +346,152 @@ def _diagnose_failure(
     return "RETRIEVAL", "Expected evidence exists in chunks but was not retrieved in Top-10."
 
 
-def evaluate_questions(
-    questions,
+def _unscored_case(item, *, review_required):
+    """Build the report row for a case excluded from retrieval scoring."""
+    category = item.get("category", item.get("type", "text"))
+    return {
+        "question": item["question"],
+        "source": _expected_source(item) if review_required else None,
+        "expected_page": item.get("expected_page") if review_required else None,
+        "category": category,
+        "expected_keywords": (
+            item.get("expected_keywords", []) if review_required else []
+        ),
+        "review_required": review_required,
+        "not_applicable": not review_required,
+        "top1_source_hit": None,
+        "top3_source_hit": None,
+        "top1_page_hit": None,
+        "top3_page_hit": None,
+        "keyword_hit": None,
+        "normalized_keyword_hit": None,
+        "results": [],
+        "diagnostic_results": [],
+        "error_layer": "GT_UNCERTAIN" if review_required else None,
+        "reason": (
+            "Ground truth requires human review; this case was not evaluated."
+            if review_required
+            else None
+        ),
+    }
+
+
+def _evaluate_scored_question(
+    item,
+    *,
     model,
     chunks,
     embeddings,
-    top_k=TOP_K,
-    documents=None,
-    representation_reference_documents=None,
+    top_k,
+    documents,
+    representation_reference_documents,
 ):
-    """Measure source/page hits and raw keyword hits without evaluating generation."""
-    cases = []
+    """Retrieve and score one question, including failure attribution."""
+    expected_source = _expected_source(item)
+    expected_page = item.get("expected_page")
+    expected_keywords = item.get("expected_keywords", [])
+    category = item.get("category", item.get("type", "text"))
 
-    for item in questions:
-        expected_source = _expected_source(item)
-        expected_page = item.get("expected_page")
-        expected_keywords = item.get("expected_keywords", [])
-        category = item.get("category", item.get("type", "text"))
+    if chunks:
+        query_embedding = model.encode(
+            item["question"],
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        results = retrieve(
+            query_embedding,
+            chunks,
+            embeddings,
+            top_k=max(top_k, DIAGNOSTIC_K),
+        )
+    else:
+        results = []
+    top_results = results[:top_k]
+    diagnostic_results = results[:max(top_k, DIAGNOSTIC_K)]
 
-        if item.get("review_required", False):
-            cases.append(
-                {
-                    "question": item["question"],
-                    "source": expected_source,
-                    "expected_page": expected_page,
-                    "category": category,
-                    "expected_keywords": expected_keywords,
-                    "review_required": True,
-                    "not_applicable": False,
-                    "top1_source_hit": None,
-                    "top3_source_hit": None,
-                    "top1_page_hit": None,
-                    "top3_page_hit": None,
-                    "keyword_hit": None,
-                    "normalized_keyword_hit": None,
-                    "results": [],
-                    "diagnostic_results": [],
-                    "error_layer": "GT_UNCERTAIN",
-                    "reason": "Ground truth requires human review; this case was not evaluated.",
-                }
-            )
-            continue
+    top1_source_hit = (
+        None
+        if expected_source is None
+        else bool(results and results[0]["source"] == expected_source)
+    )
+    top3_source_hit = (
+        None
+        if expected_source is None
+        else any(result["source"] == expected_source for result in top_results)
+    )
+    top1_page_hit = (
+        None
+        if expected_page is None
+        else bool(results and _page_hit(results[0], expected_page, expected_source))
+    )
+    top3_page_hit = (
+        None
+        if expected_page is None
+        else any(
+            _page_hit(result, expected_page, expected_source) for result in top_results
+        )
+    )
+    evidence_results = [
+        result for result in top_results if _matches_case_scope(item, result)
+    ]
+    retrieved_text = "\n".join(
+        result["text"] for result in evidence_results
+    ).casefold()
+    keyword_hit = (
+        None
+        if not expected_keywords
+        else all(keyword.casefold() in retrieved_text for keyword in expected_keywords)
+    )
+    normalized_keyword_hit = (
+        None
+        if not expected_keywords
+        else _contains_keywords_in_texts(
+            [result.get("text", "") for result in evidence_results],
+            expected_keywords,
+        )
+    )
 
-        if (
-            expected_source is None
-            and expected_page is None
-            and not expected_keywords
-            and category == "unanswerable"
-        ):
-            cases.append(
-                {
-                    "question": item["question"],
-                    "source": None,
-                    "expected_page": None,
-                    "category": category,
-                    "expected_keywords": [],
-                    "review_required": False,
-                    "not_applicable": True,
-                    "top1_source_hit": None,
-                    "top3_source_hit": None,
-                    "top1_page_hit": None,
-                    "top3_page_hit": None,
-                    "keyword_hit": None,
-                    "normalized_keyword_hit": None,
-                    "results": [],
-                    "diagnostic_results": [],
-                    "error_layer": None,
-                    "reason": None,
-                }
-            )
-            continue
+    case = {
+        "question": item["question"],
+        "source": expected_source,
+        "expected_page": expected_page,
+        "category": category,
+        "review_required": False,
+        "not_applicable": False,
+        "expected_keywords": expected_keywords,
+        "top1_source_hit": top1_source_hit,
+        "top3_source_hit": top3_source_hit,
+        "top1_page_hit": top1_page_hit,
+        "top3_page_hit": top3_page_hit,
+        "keyword_hit": keyword_hit,
+        "normalized_keyword_hit": normalized_keyword_hit,
+        "results": top_results,
+        "diagnostic_results": diagnostic_results,
+    }
+    failed = (
+        top1_source_hit is False
+        or top3_source_hit is False
+        or top1_page_hit is False
+        or top3_page_hit is False
+        or normalized_keyword_hit is False
+    )
+    if failed:
+        case["error_layer"], case["reason"] = _diagnose_failure(
+            item,
+            documents,
+            chunks,
+            diagnostic_results,
+            top_k=top_k,
+            representation_reference_documents=representation_reference_documents,
+        )
+    else:
+        case["error_layer"] = None
+        case["reason"] = None
+    return case
 
-        if chunks:
-            query_embedding = model.encode(
-                item["question"],
-                convert_to_numpy=True,
-                show_progress_bar=False,
-            )
-            results = retrieve(
-                query_embedding,
-                chunks,
-                embeddings,
-                top_k=max(top_k, DIAGNOSTIC_K),
-            )
-        else:
-            results = []
-        top_results = results[:top_k]
-        diagnostic_results = results[:max(top_k, DIAGNOSTIC_K)]
 
-        top1_source_hit = (
-            None
-            if expected_source is None
-            else bool(results and results[0]["source"] == expected_source)
-        )
-        top3_source_hit = (
-            None
-            if expected_source is None
-            else any(result["source"] == expected_source for result in top_results)
-        )
-        top1_page_hit = (
-            None
-            if expected_page is None
-            else bool(results and _page_hit(results[0], expected_page, expected_source))
-        )
-        top3_page_hit = (
-            None
-            if expected_page is None
-            else any(
-                _page_hit(result, expected_page, expected_source)
-                for result in top_results
-            )
-        )
-        evidence_results = [
-            result for result in top_results if _matches_case_scope(item, result)
-        ]
-        retrieved_text = "\n".join(
-            result["text"] for result in evidence_results
-        ).casefold()
-        keyword_hit = (
-            None
-            if not expected_keywords
-            else all(keyword.casefold() in retrieved_text for keyword in expected_keywords)
-        )
-        normalized_keyword_hit = (
-            None
-            if not expected_keywords
-            else _contains_keywords_in_texts(
-                [result.get("text", "") for result in evidence_results],
-                expected_keywords,
-            )
-        )
-
-        case = {
-            "question": item["question"],
-            "source": expected_source,
-            "expected_page": expected_page,
-            "category": category,
-            "review_required": False,
-            "not_applicable": False,
-            "expected_keywords": expected_keywords,
-            "top1_source_hit": top1_source_hit,
-            "top3_source_hit": top3_source_hit,
-            "top1_page_hit": top1_page_hit,
-            "top3_page_hit": top3_page_hit,
-            "keyword_hit": keyword_hit,
-            "normalized_keyword_hit": normalized_keyword_hit,
-            "results": top_results,
-            "diagnostic_results": diagnostic_results,
-        }
-        failed = (
-            top1_source_hit is False
-            or top3_source_hit is False
-            or top1_page_hit is False
-            or top3_page_hit is False
-            or normalized_keyword_hit is False
-        )
-        if failed:
-            case["error_layer"], case["reason"] = _diagnose_failure(
-                item,
-                documents,
-                chunks,
-                diagnostic_results,
-                top_k=top_k,
-                representation_reference_documents=representation_reference_documents,
-            )
-        else:
-            case["error_layer"] = None
-            case["reason"] = None
-        cases.append(case)
-
+def _summarize_cases(cases):
+    """Aggregate per-question rows into the existing report structure."""
     return {
         "cases": cases,
         "total": len(cases),
@@ -528,6 +530,39 @@ def evaluate_questions(
             )
         },
     }
+
+
+def evaluate_questions(
+    questions,
+    model,
+    chunks,
+    embeddings,
+    top_k=TOP_K,
+    documents=None,
+    representation_reference_documents=None,
+):
+    """Measure source/page hits and raw keyword hits without evaluating generation."""
+    cases = []
+
+    for item in questions:
+        if item.get("review_required", False):
+            cases.append(_unscored_case(item, review_required=True))
+        elif not _requires_retrieval_scoring(item):
+            cases.append(_unscored_case(item, review_required=False))
+        else:
+            cases.append(
+                _evaluate_scored_question(
+                    item,
+                    model=model,
+                    chunks=chunks,
+                    embeddings=embeddings,
+                    top_k=top_k,
+                    documents=documents,
+                    representation_reference_documents=representation_reference_documents,
+                )
+            )
+
+    return _summarize_cases(cases)
 
 
 def _format_metric(name, hits, total):

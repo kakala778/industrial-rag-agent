@@ -74,6 +74,70 @@ class PdfEvaluationTests(unittest.TestCase):
 
         load_pdf.assert_not_called()
 
+    def test_single_pdf_rejects_scored_question_without_expected_source(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            selected_pdf = Path(temp_dir) / "selected.pdf"
+            selected_pdf.write_bytes(b"pdf placeholder")
+            questions = [
+                {
+                    "question": "Question for the selected PDF?",
+                    "expected_source": "selected.pdf",
+                    "expected_keywords": ["selected fact"],
+                },
+                {
+                    "question": "Question with unknown source?",
+                    "expected_keywords": ["unknown fact"],
+                },
+            ]
+
+            with patch("evaluation.evaluate_pdf_retrieval.load_pdf") as load_pdf:
+                with self.assertRaisesRegex(ValueError, "expected_source"):
+                    load_pdf_documents(
+                        temp_dir,
+                        questions,
+                        pdf_path=selected_pdf,
+                    )
+
+        load_pdf.assert_not_called()
+
+    def test_directory_loads_all_pdfs_for_scored_question_without_source(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_names = {"selected.pdf", "other.pdf"}
+            for name in pdf_names:
+                (Path(temp_dir) / name).write_bytes(b"pdf placeholder")
+            questions = [
+                {
+                    "question": "Question with known source?",
+                    "expected_source": "selected.pdf",
+                    "expected_keywords": ["selected fact"],
+                },
+                {
+                    "question": "Question with unknown source?",
+                    "expected_keywords": ["unknown fact"],
+                },
+            ]
+
+            def fake_load_pdf(path, **_kwargs):
+                source = Path(path).name
+                return [
+                    {
+                        "text": source,
+                        "metadata": {"source": source, "page": 1},
+                    }
+                ]
+
+            with patch(
+                "evaluation.evaluate_pdf_retrieval.load_pdf",
+                side_effect=fake_load_pdf,
+            ) as load_pdf:
+                documents = load_pdf_documents(temp_dir, questions)
+
+        self.assertEqual(
+            {document["metadata"]["source"] for document in documents},
+            pdf_names,
+        )
+        self.assertEqual(load_pdf.call_count, 2)
+
     def test_missing_documents_do_not_create_parsing_attribution(self):
         item = {
             "question": "Where is the expected limit stated?",
