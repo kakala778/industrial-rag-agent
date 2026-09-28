@@ -429,6 +429,21 @@ chunks contained zero data URI characters. M6 is frozen as a measured
 experimental baseline, not as a production-readiness claim. See the
 [anonymized M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
+## Companion Component: Industrial Preprocessor
+
+The reusable preprocessing source is included under
+[`components/industrial-preprocessor/`](components/industrial-preprocessor/)
+as a standalone Python subproject. It keeps its own `src` package and should
+be run from that directory in a separate Python 3.12 environment, avoiding a
+module-name collision with the RAG root `src` package. See the component
+README for setup.
+
+This is a repository-level co-location only: the RAG MinerU adapter still uses
+its existing local runner configuration and does not import this component.
+The MinerU runtime, local models, PDFs, parser outputs, evaluation datasets,
+and data-dependent experiment reports remain outside the public repository.
+Set `MINERU_RUNNER_PATH` or pass `--mineru-runner` for a local MinerU runner.
+
 ## Roadmap
 
 - [x] Project initialization

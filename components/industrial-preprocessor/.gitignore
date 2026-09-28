@@ -1,0 +1,58 @@
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test and coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.code-workspace
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary and log files
+*.tmp
+*.temp
+*.log
+~$*
+
+# Generated MinerU outputs and experimental artifacts
+artifacts/
+
+# Codex/superpowers workflow artifacts
+.superpowers/
+docs/superpowers/
+
+# Local document inputs and parser artifacts
+/artifacts/
+/data/
+/outputs/
+/models/
+.mineru-home/
+.cache/
+*.pdf
+*.zip
+*.gguf
+*.onnx
+*.pth
+*.pt
