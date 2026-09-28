@@ -12,6 +12,7 @@ import pymupdf
 from src.document_loader import load_pdf
 from src.mineru_loader import (
     _chart_body_text,
+    _default_runner_path,
     _documents_from_middle_json,
     load_pdf_with_mineru,
 )
@@ -79,6 +80,35 @@ class MineruLoaderTests(unittest.TestCase):
         middle_json = output_dir / f"{self.pdf_path.stem}.json"
         middle_json.write_text(json.dumps(MIDDLE_JSON), encoding="utf-8")
         return subprocess.CompletedProcess(command, 0, "parsed", "")
+
+    def test_default_runner_uses_integrated_mineru_directory(self):
+        repo_root = self.root / "industrial-rag-agent"
+        project_root = repo_root / "rag-agent"
+        expected_runner = repo_root / "minerU" / "mineru-405-poc" / "run-mineru.ps1"
+        expected_runner.parent.mkdir(parents=True)
+        expected_runner.write_text("# local runner", encoding="utf-8")
+
+        with (
+            patch("src.mineru_loader.PROJECT_ROOT", project_root),
+            patch.dict("src.mineru_loader.os.environ", {"MINERU_RUNNER_PATH": ""}),
+        ):
+            self.assertEqual(_default_runner_path(), expected_runner)
+
+    def test_default_runner_preserves_sibling_project_fallback(self):
+        projects_root = self.root / "Projects"
+        repo_root = projects_root / "AI" / "industrial-rag-agent"
+        project_root = repo_root / "rag-agent"
+        expected_runner = (
+            projects_root / "Project" / "mineru-405-poc" / "run-mineru.ps1"
+        )
+        expected_runner.parent.mkdir(parents=True)
+        expected_runner.write_text("# sibling runner", encoding="utf-8")
+
+        with (
+            patch("src.mineru_loader.PROJECT_ROOT", project_root),
+            patch.dict("src.mineru_loader.os.environ", {"MINERU_RUNNER_PATH": ""}),
+        ):
+            self.assertEqual(_default_runner_path(), expected_runner)
 
     @staticmethod
     def _text_block(block_type, text):

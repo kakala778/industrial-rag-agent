@@ -1,11 +1,15 @@
 # Secrets
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
 
 # Local / private data
 data/
@@ -16,7 +20,15 @@ output/
 *.pdf
 /examples/docs/*
 !/examples/docs/README.md
-evaluation/industrial_pdf_qa.local.json
+/rag-agent/examples/docs/*
+!/rag-agent/examples/docs/README.md
+/rag-agent/evaluation/industrial_pdf_qa.local.json
+
+# Local MinerU workspace: only keep the runner wrapper in Git.
+/minerU/*
+!/minerU/mineru-405-poc/
+/minerU/mineru-405-poc/*
+!/minerU/mineru-405-poc/run-mineru.ps1
 
 # Local model files
 .ollama/

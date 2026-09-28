@@ -38,9 +38,18 @@ def _default_runner_path():
     if configured_path:
         return Path(configured_path).expanduser()
 
-    # The local workspace layout is D:\Dev\Projects\AI\<repo> and
-    # D:\Dev\Projects\Project\mineru-405-poc.
-    projects_root = PROJECT_ROOT.parent.parent
+    # Keep support for the original sibling-workspace layout.
+    if PROJECT_ROOT.name == "rag-agent":
+        integrated_runner = (
+            PROJECT_ROOT.parent
+            / "minerU"
+            / "mineru-405-poc"
+            / "run-mineru.ps1"
+        )
+        if integrated_runner.is_file():
+            return integrated_runner
+
+    projects_root = PROJECT_ROOT.parent.parent.parent
     return projects_root / "Project" / "mineru-405-poc" / "run-mineru.ps1"
 
 

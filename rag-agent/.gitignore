@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local / private data
+data/
+outputs/
+output/
+.local/
+.mineru-home/
+*.pdf
+/examples/docs/*
+!/examples/docs/README.md
+evaluation/industrial_pdf_qa.local.json
+
+# Local model files
+.ollama/
+*.gguf
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

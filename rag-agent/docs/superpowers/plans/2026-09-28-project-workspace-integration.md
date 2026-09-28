@@ -1,5 +1,11 @@
 # Plan: integrate the Project workspace safely
 
+> **Superseded:** This plan predates the current merged local folder layout.
+> The active Git root is the parent repository; `rag-agent/` contains the RAG
+> project, while the full `minerU/` workspace remains local-only except for
+> `minerU/mineru-405-poc/run-mineru.ps1`. Do not use this historical plan as a
+> staging allowlist; follow the current root `.gitignore` and README instead.
+
 ## Scope and constraints
 
 - Base: current `feat/m6-mineru-industrial-rag` checkout.

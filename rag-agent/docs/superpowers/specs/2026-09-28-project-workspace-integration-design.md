@@ -1,5 +1,13 @@
 # Project Workspace Integration Design
 
+> **Superseded:** This design records the initial component-only proposal. The
+> current repository root now contains the `rag-agent/` app and the local
+> `minerU/` workspace. The public repository keeps the curated preprocessing
+> component under `rag-agent/components/industrial-preprocessor/`; local
+> datasets, environments, models, and generated outputs under `minerU/` remain
+> excluded. See the repository-root README and `.gitignore` for the active
+> layout.
+
 ## Goal
 
 Make the reusable industrial document preprocessing code available inside the
