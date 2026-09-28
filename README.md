@@ -444,6 +444,19 @@ The MinerU runtime, local models, PDFs, parser outputs, evaluation datasets,
 and data-dependent experiment reports remain outside the public repository.
 Set `MINERU_RUNNER_PATH` or pass `--mineru-runner` for a local MinerU runner.
 
+The full local Project workspace is reachable here as `.local/Project` through
+a Windows directory junction to the sibling workspace. Git ignores `.local/`,
+so only the reusable component source above is versioned; local datasets,
+reports, virtual environments, and models remain machine-specific.
+On another Windows checkout, create the link from the repository root,
+replacing the target with that machine's Project folder:
+
+~~~powershell
+New-Item -ItemType Directory -Path .local -Force | Out-Null
+New-Item -ItemType Junction -Path .local\Project -Target '<absolute path to Project>'
+~~~ A fresh
+clone must configure its own `MINERU_RUNNER_PATH`.
+
 ## Roadmap
 
 - [x] Project initialization
