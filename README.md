@@ -5,8 +5,13 @@ is a minimal prototype, not a production system.
 
 ## Repository layout
 
-- [`rag-agent/`](rag-agent/README.md) contains the RAG application and its M1–M6
-  code, evaluation data, and tests.
+- [`rag-agent/`](rag-agent/README.md) contains the RAG application and its
+  M1–M7 experimental code, evaluation tools, and tests. M7.1 adds optional
+  reranking; M7.2 audits which failures require retrieval or document
+  processing improvements. M7.1 and M7.2 are complete experiments in the
+  current worktree. M8 is prepared as a Document Intelligence experiment but
+  has not started; see the
+  [M8 plan](rag-agent/docs/superpowers/plans/2026-10-01-m8-document-intelligence.md).
 - [`rag-agent/components/industrial-preprocessor/`](rag-agent/components/industrial-preprocessor/README.md)
   contains the curated reusable preprocessing source from the local Project
   workspace. It remains a standalone component and is not imported by the RAG

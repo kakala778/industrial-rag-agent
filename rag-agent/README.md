@@ -14,6 +14,9 @@ RAG context construction, and source/page citations. M6 validation is now
 complete as an experimental baseline on eight anonymized local PDFs. This is
 not a production-readiness claim; the expanded measurements and limitations
 are recorded in the [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
+M7.1 adds an optional reranker experiment while preserving dense retrieval as
+the default, and M7.2 records a case-level failure analysis. Both are
+experimental milestones; the reranker is not the default path.
 
 ## Current Architecture
 
@@ -89,7 +92,8 @@ The PDF RAG entry point is `python src/pdf_rag_demo.py <path-to-local-pdf>`.
 This baseline does not include:
 
 - Vector database
-- Reranker
+- Production reranking; the optional M7.1 reranker is experimental, and dense
+  retrieval remains the default
 - Permission and access control
 - Document version management
 - Multi-tenant support
@@ -429,6 +433,131 @@ chunks contained zero data URI characters. M6 is frozen as a measured
 experimental baseline, not as a production-readiness claim. See the
 [anonymized M6 evaluation report](docs/m6-industrial-pdf-evaluation.md).
 
+## M7.1 — Reranker Experiment
+
+Added reranker experiment on top of the dense retrieval baseline. The purpose
+was to test whether a cross-encoder can improve ordering when dense retrieval
+has already recalled the correct evidence. The experiment keeps the existing
+retrieval implementation and default mode intact:
+
+```text
+Dense retrieval Top-20
+→ BAAI/bge-reranker-v2-m3
+→ Top-3
+```
+
+On first use, Hugging Face downloads the model into its local user cache; model
+weights are not stored in this repository.
+
+Run the PDF RAG CLI in dense mode (default), reranker mode, or compare both for
+each question:
+
+```bash
+python src/pdf_rag_demo.py path/to/local.pdf --mode dense
+python src/pdf_rag_demo.py path/to/local.pdf --mode reranker
+python src/pdf_rag_demo.py path/to/local.pdf --mode compare
+```
+
+Run the M6 PDF retrieval set through both modes with local PDFs and QA data:
+
+```bash
+python evaluation/evaluate_pdf_retrieval.py \
+  --mode compare \
+  --pdf-dir path/to/local-pdfs \
+  --dataset path/to/local-m6-qa.json \
+  --parser mineru
+```
+
+The comparison used the same 32 answerable M6 questions and cached structured
+MinerU documents. Retrieval and evidence metrics were:
+
+| Metric | Baseline Dense | Dense + Reranker |
+| --- | ---: | ---: |
+| Top-1 source hit | 25/32 | 31/32 |
+| Top-3 source hit | 30/32 | 31/32 |
+| Top-1 page hit | 9/32 | 18/32 |
+| Top-3 page hit | 15/32 | 19/32 |
+| Raw evidence hit | 8/32 | 11/32 |
+| Normalized evidence hit | 10/32 | 14/32 |
+
+The evaluator changed the failure attribution from 10 to 3 RANKING cases;
+PARSING remained at 11. Four of the 10 cases originally attributed to RANKING
+moved into evidence Top-3. In one case, the correct evidence moved from dense
+rank 4 to reranker rank 1. These are results from one local 32-question set,
+not a general accuracy claim. The run used CPU-only PyTorch. The original M7.1
+summary did not preserve case rows; the M7.2 replay below reconciles the
+baseline RANKING cases using the same evidence matcher.
+
+**Decision:** keep reranking as an optional experiment for comparisons; retain
+dense retrieval as the default. Reranking improved the measured ranking metrics
+but did not change the PARSING count, and it cannot recover evidence absent
+from its dense Top-20 candidates. Remaining failures should be audited before
+adding another retrieval component.
+
+## M7.2 — Reranker Failure Analysis
+
+Purpose: **“Analyze which failures are solved by reranking and which require
+retrieval or document processing improvements.”** This is a case-level audit;
+it does not change retrieval, reranking, embedding, chunking, MinerU, or prompts.
+
+The real M6 replay used 35 QA rows (32 scored, 3 unanswerable), 8 original
+PDFs, and 8/8 matching MinerU structured caches. Its 25 original failures
+classify as:
+
+| Category | Count |
+| --- | ---: |
+| FIXED_BY_RERANKER | 4 |
+| STILL_RANKING_FAILURE | 3 |
+| RETRIEVAL_FAILURE | 4 |
+| PARSING_FAILURE | 11 |
+| INSUFFICIENT_DATA | 3 |
+
+The 10 M6 RANKING labels split into 4 fixed, 3 still ranking, and 3 unassigned
+cases whose evidence already matched dense and reranked Top-3. Those three are
+left as `INSUFFICIENT_DATA` because they do not fit the specified causal classes.
+That resolves the aggregate discrepancy without forcing a label.
+The full anonymized cases and real examples are in
+[`docs/m7-reranker-failure-analysis.md`](docs/m7-reranker-failure-analysis.md).
+
+The replay command from `rag-agent/` is:
+
+```bash
+python evaluation/evaluate_pdf_retrieval.py \
+  --mode compare \
+  --parser mineru \
+  --representation structured \
+  --pdf-dir path/to/industrial-rag-data/input \
+  --dataset path/to/industrial-rag-data/qa/m6_final_qa.local.json \
+  --failure-analysis-output outputs/m7_failure_analysis.json
+```
+
+The generated file is Git-ignored. It contains one row per question with the
+dense candidate count and Top-20 scores/ranks, reranked Top-3 scores/ranks,
+rank movement, and allowlisted source/page/block metadata. Source names become
+run-local aliases. Question text, expected answers, evidence keywords, and
+candidate document text are omitted. Parsing failures are counted only when
+the MinerU structured evaluation explicitly confirms missing evidence.
+
+PARSING_FAILURE is the largest remaining class (11/25, 44%), so the results
+support a Document Intelligence experiment before Hybrid Search. Retrieval
+failures are 4/25 and still-ranking failures are 3/25; they do not justify
+starting BM25 or broad reranker tuning first. See the
+[full report](docs/m7-reranker-failure-analysis.md) for the classification
+rules, transition counts, and anonymized examples.
+
+## M8 Preparation — Document Intelligence Experiment
+
+M7.2 found 11 `PARSING_FAILURE` cases among the 25 original M6 failures
+(44%), the largest classified group. M8 is prepared to inspect those cases
+against the original pages and MinerU structured output, identify the specific
+representation gap, then run one controlled document-representation
+experiment. The intervention has not been selected or implemented. Retrieval,
+reranking, embeddings, chunking, and prompts stay fixed during that comparison.
+
+See the [M8 experiment plan](docs/superpowers/plans/2026-10-01-m8-document-intelligence.md).
+M8 is prepared, not started; the plan allows a no-change outcome if the local
+evidence does not support a reproducible intervention.
+
 ## Companion Component: Industrial Preprocessor
 
 The reusable preprocessing source is included under
@@ -461,6 +590,9 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M6 — Local pilot A/B and RAG smoke run
 - [x] M6 — Structured MinerU representation experiment
 - [x] M6 — Broader original-PDF-grounded QA and large-scan validation
+- [x] M7.1 — Dense + reranker comparison experiment
+- [x] M7.2 — Reranker failure analysis on the original M6 inputs
+- [ ] M8 — Document Intelligence experiment (prepared; not started)
 - [ ] Agent
 - [ ] Industrial document improvements
 
