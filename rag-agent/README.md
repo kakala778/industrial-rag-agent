@@ -545,18 +545,66 @@ starting BM25 or broad reranker tuning first. See the
 [full report](docs/m7-reranker-failure-analysis.md) for the classification
 rules, transition counts, and anonymized examples.
 
-## M8 Preparation — Document Intelligence Experiment
+## M8.2 — Visual Information Representation Experiment
 
 M7.2 found 11 `PARSING_FAILURE` cases among the 25 original M6 failures
-(44%), the largest classified group. M8 is prepared to inspect those cases
-against the original pages and MinerU structured output, identify the specific
-representation gap, then run one controlled document-representation
-experiment. The intervention has not been selected or implemented. Retrieval,
-reranking, embeddings, chunking, and prompts stay fixed during that comparison.
+(44%), the largest classified group. M8.1 audited all 11 against the local
+original pages, Middle JSON, and structured Documents. Five were OCR failures,
+two image-information losses, one layout-relation failure, and three remain
+uncertain. No case confirmed table row/column structure loss or loss introduced
+only by the structured adapter. M8.2 compared the current `structured` mode,
+OCR-labelled existing image text, and full block metadata on the same local M6
+data. Parsing failures remained 11/11. OCR labeling reduced the M7 Top-3 page
+hit from 19/32 to 18/32 and normalized evidence from 14/32 to 13/32. Full
+metadata preserved block geometry without changing retrieval metrics. No
+visual model or external OCR was added. Details are in the
+[M8.1 failure audit](docs/m8-document-intelligence-failure-audit.md) and
+[M8.2 experiment report](docs/m8-visual-representation-experiment.md).
 
-See the [M8 experiment plan](docs/superpowers/plans/2026-10-01-m8-document-intelligence.md).
-M8 is prepared, not started; the plan allows a no-change outcome if the local
-evidence does not support a reproducible intervention.
+The M8.2 script requires the fixed local M6 cohort, a one-time ignored input
+manifest, and matching MinerU caches. The manifest stores only hashes and
+counts; initialize it with `python evaluation/run_m8_visual_representation_experiment.py --initialize-input-manifest`
+when setting up the local data. Results contain anonymous metrics only in the
+ignored `outputs/` directory. The default representation remains `structured`.
+
+## M8.3 — Vision Model Feasibility Test
+
+Tested the locally installed `qwen3-vl:2b-instruct-q4_K_M` on one preselected
+case each for OCR, image-information loss, and layout-relation failure. It did
+not recover the expected evidence in any of the three cases, so the result does
+not support adding vision output to the RAG index. The page images and raw
+responses remain in ignored local output. See the
+[M8.3 feasibility report](docs/m8-vision-model-feasibility-test.md).
+
+## M8.4 — Vision Block Controlled Experiment
+
+Compared the same local vision model on a MinerU block crop, block crop plus
+MinerU text, and full-page input for selected visual failures. Only the Q10
+3× table-block crop recovered the target; image/layout cases remained
+unresolved. This remains an offline result and did not change the default
+representation. See the [M8.4 report](docs/m8-vision-block-experiment.md).
+
+## M8.5 — Focused OCR Comparison
+
+Compared the fixed five M8.1 OCR failures using identical 2×/3× MinerU block
+crops for Qwen3-VL and local RapidOCR. At 3×, strict target-evidence recovery
+was 3/5 for Qwen3-VL and 1/5 for RapidOCR; RapidOCR's normalized numeric hits
+included substring false positives. The run supports a further gated offline
+test, not default integration. The target-crop visual review found no clearly
+unsupported extra fields, but handwritten regions and the Q17 evidence-matcher
+mismatch remain unresolved; this is not a general OCR precision estimate. See
+the [M8.5 report](docs/m8-focused-ocr-comparison.md).
+
+## M8.6 — Gated Focused-VLM Retrieval A/B
+
+Analyze whether a generic MinerU metadata gate can focus OCR fallback and improve
+retrieval without disturbing known successes. The fixed cohort-limited A/B
+missed all four confirmed OCR positives, activated on 3/10 known-success
+controls, and left the 31-question formal metrics unchanged. A corpus-wide
+metadata-only scan projected 86.5 VLM calls per PDF on average. Gated VLM
+fallback was evaluated and not adopted; the default RAG pipeline remains
+unchanged. Q17 remains GT_UNCERTAIN and is excluded from formal metrics. See the
+[M8.6 report](docs/m8-gated-vision-retrieval-ab.md).
 
 ## Companion Component: Industrial Preprocessor
 
@@ -592,7 +640,12 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M6 — Broader original-PDF-grounded QA and large-scan validation
 - [x] M7.1 — Dense + reranker comparison experiment
 - [x] M7.2 — Reranker failure analysis on the original M6 inputs
-- [ ] M8 — Document Intelligence experiment (prepared; not started)
+- [x] M8.1 — Document Intelligence failure audit
+- [x] M8.2 — Visual information representation experiment
+- [x] M8.3 — Vision model feasibility test
+- [x] M8.4 — Vision block controlled experiment
+- [x] M8.5 — Focused OCR comparison (offline; handwritten regions and Q17 matcher discrepancy remain open)
+- [x] M8.6 — Gated focused-VLM retrieval A/B (offline; gate not adopted)
 - [ ] Agent
 - [ ] Industrial document improvements
 
