@@ -104,7 +104,7 @@ def build_prompt(question, context):
     return PROMPT_TEMPLATE.format(context=context, question=question)
 
 
-def format_sources(results, section_by_chunk=None):
+def format_sources(results, section_by_chunk=None, *, include_score=True):
     """Format unique retrieved sources with section and retrieval metadata."""
     citations = []
     seen = set()
@@ -132,6 +132,7 @@ def format_sources(results, section_by_chunk=None):
             block_lines += f"Block type:\n{block_type}\n\n"
         if block_index is not None:
             block_lines += f"Block index:\n{block_index}\n\n"
+        score_line = f"Score:\n{result['score']:.4f}" if include_score else ""
         citations.append(
             f"[{len(citations) + 1}]\n"
             f"File:\n{result['source']}\n\n"
@@ -139,7 +140,7 @@ def format_sources(results, section_by_chunk=None):
             f"{page_line}"
             f"{block_lines}"
             f"Chunk:\n{result['chunk_id']}\n\n"
-            f"Score:\n{result['score']:.4f}"
+            f"{score_line}"
         )
 
     return "\n\n".join(citations)

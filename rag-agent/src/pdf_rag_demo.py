@@ -6,6 +6,8 @@ from pathlib import Path
 
 if __package__:
     from .document_loader import load_pdf
+    from .hybrid_retrieval import HYBRID_CANDIDATE_K, retrieve_hybrid
+    from .lexical_retrieval import BM25Index
     from .rag_demo import build_context, build_prompt, format_sources, generate_answer
     from .retrieval import (
         TOP_K,
@@ -17,12 +19,14 @@ if __package__:
     from .reranker import DEFAULT_RERANKER_MODEL, load_reranker, rerank
 else:
     from document_loader import load_pdf
+    from hybrid_retrieval import HYBRID_CANDIDATE_K, retrieve_hybrid
+    from lexical_retrieval import BM25Index
     from rag_demo import build_context, build_prompt, format_sources, generate_answer
     from retrieval import TOP_K, embed_chunks, load_model, retrieve, split_documents
     from reranker import DEFAULT_RERANKER_MODEL, load_reranker, rerank
 
 
-RERANK_CANDIDATE_K = 20
+RERANK_CANDIDATE_K = HYBRID_CANDIDATE_K
 
 
 def initialize_pdf_retriever(
@@ -57,8 +61,19 @@ def build_argument_parser():
     parser.add_argument(
         "--mode",
         choices=("dense", "reranker", "compare"),
-        default="dense",
-        help="Retrieval mode (default: dense baseline)",
+        default=None,
+        help="Legacy Dense/reranker mode; cannot be combined with --retriever/--rerank",
+    )
+    parser.add_argument(
+        "--retriever",
+        choices=("dense", "hybrid"),
+        default=None,
+        help="Retriever to use (default: dense)",
+    )
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Rerank the selected retriever's Top-20 candidates with BGE",
     )
     parser.add_argument(
         "--reranker-model",
@@ -90,8 +105,38 @@ def build_argument_parser():
     return parser
 
 
+def resolve_retrieval_options(*, mode, retriever, rerank):
+    """Resolve legacy modes or orthogonal retriever/reranker selectors."""
+    if mode is not None and (retriever is not None or rerank):
+        raise ValueError("--mode cannot be combined with --retriever or --rerank")
+
+    if mode == "dense":
+        return "dense", False, False
+    if mode == "reranker":
+        return "dense", True, False
+    if mode == "compare":
+        return "dense", True, True
+    if mode is not None:
+        raise ValueError(f"unsupported legacy retrieval mode: {mode}")
+
+    selected_retriever = retriever or "dense"
+    if selected_retriever not in ("dense", "hybrid"):
+        raise ValueError(f"unsupported retriever: {selected_retriever}")
+    return selected_retriever, bool(rerank), False
+
+
 def main():
-    args = build_argument_parser().parse_args()
+    argument_parser = build_argument_parser()
+    args = argument_parser.parse_args()
+
+    try:
+        selected_retriever, use_reranker, compare_mode = resolve_retrieval_options(
+            mode=args.mode,
+            retriever=args.retriever,
+            rerank=args.rerank,
+        )
+    except ValueError as exc:
+        argument_parser.error(str(exc))
 
     try:
         documents, chunks, model, embeddings = initialize_pdf_retriever(
@@ -101,9 +146,8 @@ def main():
             mineru_runner=args.mineru_runner,
             representation=args.representation,
         )
-        reranker_model = (
-            load_reranker(args.reranker_model) if args.mode != "dense" else None
-        )
+        bm25_index = BM25Index(chunks) if selected_retriever == "hybrid" else None
+        reranker_model = load_reranker(args.reranker_model) if use_reranker else None
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -123,6 +167,8 @@ def main():
         f"Loaded {len(documents)} documents across {len(represented_pages)} "
         f"represented PDF pages into {len(chunks)} chunks."
     )
+    if selected_retriever == "hybrid":
+        print("Retriever: hybrid")
 
     while True:
         try:
@@ -138,10 +184,8 @@ def main():
             convert_to_numpy=True,
             show_progress_bar=False,
         )
-        if args.mode == "dense":
-            results = retrieve(query_embedding, chunks, embeddings, top_k=TOP_K)
-        else:
-            candidates = retrieve(
+        if compare_mode:
+            dense_candidates = retrieve(
                 query_embedding,
                 chunks,
                 embeddings,
@@ -149,23 +193,49 @@ def main():
             )
             reranked_results = rerank(
                 question,
-                candidates,
+                dense_candidates,
                 reranker_model,
                 top_k=TOP_K,
             )
-            if args.mode == "compare":
-                _print_retrieved_results("Dense results", candidates[:TOP_K])
-                _print_retrieved_results("Reranker results", reranked_results)
+            _print_retrieved_results("Dense results", dense_candidates[:TOP_K])
+            _print_retrieved_results("Reranker results", reranked_results)
             results = reranked_results
+        elif selected_retriever == "dense" and not use_reranker:
+            results = retrieve(query_embedding, chunks, embeddings, top_k=TOP_K)
+        elif selected_retriever == "dense":
+            candidates = retrieve(
+                query_embedding,
+                chunks,
+                embeddings,
+                top_k=RERANK_CANDIDATE_K,
+            )
+            results = rerank(question, candidates, reranker_model, top_k=TOP_K)
+        else:
+            candidates = retrieve_hybrid(
+                question,
+                query_embedding,
+                chunks,
+                embeddings,
+                bm25_index,
+            )
+            results = (
+                rerank(question, candidates, reranker_model, top_k=TOP_K)
+                if use_reranker
+                else candidates[:TOP_K]
+            )
         if not results:
             print("没有检索到相关资料。\n")
             continue
 
-        if args.mode != "compare":
-            _print_retrieved_results("Retrieved Context", results)
+        if not compare_mode:
+            _print_retrieved_results(
+                "Retrieved Context",
+                results,
+                show_scores=(selected_retriever != "hybrid"),
+            )
 
         prompt = build_prompt(question, build_context(results))
-        if args.mode == "compare":
+        if compare_mode:
             print("\nGenerating answer from reranker Top-3 context...")
         else:
             print("\nGenerating answer...")
@@ -176,14 +246,17 @@ def main():
             return 1
 
         print(f"\n回答：\n\n{answer}\n")
-        sources = format_sources(results)
+        sources = format_sources(
+            results,
+            include_score=(selected_retriever != "hybrid"),
+        )
         if sources:
             print(f"Sources:\n\n{sources}\n")
 
     return 0
 
 
-def _print_retrieved_results(title, results):
+def _print_retrieved_results(title, results, *, show_scores=True):
     print(f"\n{title}:")
     for rank, result in enumerate(results, start=1):
         print(f"\nTop {rank}:")
@@ -191,9 +264,10 @@ def _print_retrieved_results(title, results):
         page = result.get("metadata", {}).get("page")
         if page is not None:
             print(f"page: {page}")
-        print(f"score: {result['score']:.4f}")
-        if "reranker_score" in result:
-            print(f"reranker_score: {result['reranker_score']:.4f}")
+        if show_scores:
+            print(f"score: {result['score']:.4f}")
+            if "reranker_score" in result:
+                print(f"reranker_score: {result['reranker_score']:.4f}")
         print(f"chunk_id: {result['chunk_id']}")
 
 

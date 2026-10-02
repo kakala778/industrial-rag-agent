@@ -17,6 +17,11 @@ are recorded in the [M6 evaluation report](docs/m6-industrial-pdf-evaluation.md)
 M7.1 adds an optional reranker experiment while preserving dense retrieval as
 the default, and M7.2 records a case-level failure analysis. Both are
 experimental milestones; the reranker is not the default path.
+M9.1 and M9.2 evaluated a fixed BM25 + RRF strategy on the original and an
+independent question set. M9.3 exposes that strategy as an opt-in PDF CLI
+retriever; Dense without reranking remains the default. The local smoke results
+and limitations are recorded in the
+[M9.3 integration note](docs/m9-optional-hybrid-integration.md).
 
 ## Current Architecture
 
@@ -86,6 +91,23 @@ python src/evaluate_retrieval.py
 Additional 10-question and PDF retrieval evaluations are available at
 `evaluation/evaluate_retrieval.py` and `evaluation/evaluate_pdf_retrieval.py`.
 The PDF RAG entry point is `python src/pdf_rag_demo.py <path-to-local-pdf>`.
+
+The PDF CLI defaults to Dense retrieval without BGE reranking. The existing
+`--mode dense|reranker|compare` interface remains available. To select the
+optional Hybrid retriever, use `--retriever hybrid`; add `--rerank` to apply the
+existing BGE reranker to its Top-20 candidates. The new selectors also support
+Dense with or without reranking:
+
+```bash
+python src/pdf_rag_demo.py path/to/local.pdf
+python src/pdf_rag_demo.py path/to/local.pdf --mode reranker
+python src/pdf_rag_demo.py path/to/local.pdf --retriever hybrid
+python src/pdf_rag_demo.py path/to/local.pdf --retriever hybrid --rerank
+```
+
+The legacy `--mode` selector cannot be combined with `--retriever` or
+`--rerank`. Hybrid rank and score diagnostics are kept out of ordinary result
+and citation display; Dense cosine and Hybrid RRF scores have different scales.
 
 ## Current Limitations
 
@@ -655,6 +677,22 @@ QA and detailed outputs stay under ignored `outputs/m9_independent_validation/`
 and `outputs/m9_ranking_audit/`. No BM25/RRF, chunking, representation, model or
 prompt parameter was changed; no vector database was added.
 
+## M9.3 — Optional Hybrid Retrieval Integration
+
+The frozen M9.1 Hybrid+BGE strategy is available as an explicit option in the
+PDF RAG CLI. Invocation without selectors remains Dense with no reranker and no
+BM25 index. Existing `--mode dense|reranker|compare` behavior is retained;
+`--retriever hybrid` selects Hybrid, and `--rerank` optionally applies the
+existing BGE model to its Top-20 candidates. Mixed legacy and new selectors are
+rejected.
+
+The M9.3 local smoke used Q01, Q06 and unanswerable Q33 only to verify wiring,
+context, citations and the refusal path. Q01's Dense+BGE Top-3 missed the
+target evidence scope while Hybrid+BGE included it; Q06 included target evidence
+with both retrievers; Q33 triggered the existing refusal phrase. These checks
+are not a new generation-quality benchmark. Dense remains the default. See the
+[M9.3 implementation note](docs/m9-optional-hybrid-integration.md).
+
 ## Companion Component: Industrial Preprocessor
 
 The reusable preprocessing source is included under
@@ -697,6 +735,7 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M8.6 — Gated focused-VLM retrieval A/B (offline; gate not adopted)
 - [x] M9.1 — Hybrid retrieval controlled experiment (offline; default unchanged)
 - [x] M9.2 — Independent validation and ranking audit (offline; page regressions recorded)
+- [x] M9.3 — Optional Hybrid retrieval integration (Dense remains default)
 - [ ] Agent
 - [ ] Industrial document improvements
 

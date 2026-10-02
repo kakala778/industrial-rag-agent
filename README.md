@@ -6,7 +6,7 @@ is a minimal prototype, not a production system.
 ## Repository layout
 
 - [`rag-agent/`](rag-agent/README.md) contains the RAG application and its
-  M1–M9.2 experimental code, evaluation tools, and tests. M7.1 adds optional
+  M1–M9.3 experimental code, evaluation tools, and tests. M7.1 adds optional
   reranking; M7.2 audits which failures require retrieval or document
   processing improvements. M7.1 and M7.2 are complete experiments in the
   current worktree. M8.1 audits parsing failures, and M8.2 compares
@@ -36,6 +36,11 @@ is a minimal prototype, not a production system.
   identify matcher, scope and row-context limitations, so BGE is not established
   as the sole bottleneck. See the
   [M9.2 report](rag-agent/docs/m9-independent-validation-and-ranking-audit.md).
+  M9.3 exposes the frozen Hybrid retriever as an opt-in PDF CLI path. Dense
+  without reranking remains the default. Q01/Q06/Q33 local smokes verified
+  context, citation metadata and the existing refusal path, but do not establish
+  generation quality. See the
+  [M9.3 integration note](rag-agent/docs/m9-optional-hybrid-integration.md).
   The [M8 plan](rag-agent/docs/superpowers/plans/2026-10-01-m8-document-intelligence.md)
   records the broader experiment scope.
 - [`rag-agent/components/industrial-preprocessor/`](rag-agent/components/industrial-preprocessor/README.md)
