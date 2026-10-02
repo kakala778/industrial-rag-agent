@@ -606,6 +606,28 @@ fallback was evaluated and not adopted; the default RAG pipeline remains
 unchanged. Q17 remains GT_UNCERTAIN and is excluded from formal metrics. See the
 [M8.6 report](docs/m8-gated-vision-retrieval-ab.md).
 
+## M9.1 — Hybrid Retrieval Controlled Experiment
+
+The fixed offline comparison uses the same 2,996 chunks: Dense Top-20 + BM25
+Top-20 → deduplicated RRF (k=60) → Hybrid Top-20 → existing BGE Top-3.
+Hybrid+BGE improves Top-3 page 19/32 → 23/32 and normalized evidence
+14/32 → 17/32, with no regression among the 14 baseline evidence successes.
+All four original retrieval failures enter Hybrid Top-20; three reach final
+Top-3, while Q24 remains a ranking failure. Pure BM25 loses three Dense
+successes; RRF protects them. Retain the optional strategy for further
+validation; the default application pipeline remains unchanged, and M8 stays
+frozen. See the [M9.1 report](docs/m9-hybrid-retrieval-experiment.md).
+
+Run with the original ignored local inputs and caches:
+
+```powershell
+python evaluation/run_m9_hybrid_retrieval_experiment.py --compare-all
+```
+
+Individual experiment arms support `--retriever dense|bm25|hybrid` and
+`--rerank on|off`; anonymous outputs remain under ignored
+`outputs/m9_hybrid_retrieval/`. No vector database or new dependency is added.
+
 ## Companion Component: Industrial Preprocessor
 
 The reusable preprocessing source is included under
@@ -646,6 +668,7 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M8.4 — Vision block controlled experiment
 - [x] M8.5 — Focused OCR comparison (offline; handwritten regions and Q17 matcher discrepancy remain open)
 - [x] M8.6 — Gated focused-VLM retrieval A/B (offline; gate not adopted)
+- [x] M9.1 — Hybrid retrieval controlled experiment (offline; default unchanged)
 - [ ] Agent
 - [ ] Industrial document improvements
 

@@ -394,6 +394,8 @@ def _evaluate_scored_question(
     representation_reference_documents,
     mode="dense",
     reranker_model=None,
+    candidate_provider=None,
+    diagnostic_k=DIAGNOSTIC_K,
 ):
     """Retrieve and score one question, including failure attribution."""
     expected_source = _expected_source(item)
@@ -403,32 +405,24 @@ def _evaluate_scored_question(
 
     dense_candidate_results = []
     if chunks:
-        query_embedding = model.encode(
-            item["question"],
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
-        if mode == "dense":
-            diagnostic_results = retrieve(
-                query_embedding,
-                chunks,
-                embeddings,
-                top_k=max(top_k, DIAGNOSTIC_K),
+        limit = max(top_k, RERANK_CANDIDATE_K if mode == "reranker" else diagnostic_k)
+        if candidate_provider is None:
+            query_embedding = model.encode(
+                item["question"],
+                convert_to_numpy=True,
+                show_progress_bar=False,
             )
+            candidates = retrieve(query_embedding, chunks, embeddings, top_k=limit)
         else:
-            candidates = retrieve(
-                query_embedding,
-                chunks,
-                embeddings,
-                top_k=max(RERANK_CANDIDATE_K, top_k),
-            )
+            # Experimental providers see the query and limit, never ground truth.
+            candidates = candidate_provider(item["question"], limit)[:limit]
+        if mode == "reranker":
             dense_candidate_results = candidates
             diagnostic_results = rerank(
-                item["question"],
-                candidates,
-                reranker_model,
-                top_k=len(candidates),
+                item["question"], candidates, reranker_model, top_k=len(candidates)
             )
+        else:
+            diagnostic_results = candidates
     else:
         diagnostic_results = []
     top_results = diagnostic_results[:top_k]
@@ -576,8 +570,10 @@ def evaluate_questions(
     representation_reference_documents=None,
     mode="dense",
     reranker_model=None,
+    candidate_provider=None,
+    diagnostic_k=DIAGNOSTIC_K,
 ):
-    """Measure PDF retrieval metrics for dense or reranked candidate ordering."""
+    """Score retrieval with the original matcher; optionally supply ranked candidates."""
     if mode not in {"dense", "reranker"}:
         raise ValueError("mode must be 'dense' or 'reranker'")
     if mode == "reranker" and chunks and reranker_model is None:
@@ -602,6 +598,8 @@ def evaluate_questions(
                     representation_reference_documents=representation_reference_documents,
                     mode=mode,
                     reranker_model=reranker_model,
+                    candidate_provider=candidate_provider,
+                    diagnostic_k=diagnostic_k,
                 )
             )
 

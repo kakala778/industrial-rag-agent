@@ -6,7 +6,7 @@ is a minimal prototype, not a production system.
 ## Repository layout
 
 - [`rag-agent/`](rag-agent/README.md) contains the RAG application and its
-  M1–M8.6 experimental code, evaluation tools, and tests. M7.1 adds optional
+  M1–M9.1 experimental code, evaluation tools, and tests. M7.1 adds optional
   reranking; M7.2 audits which failures require retrieval or document
   processing improvements. M7.1 and M7.2 are complete experiments in the
   current worktree. M8.1 audits parsing failures, and M8.2 compares
@@ -25,6 +25,11 @@ is a minimal prototype, not a production system.
   and not adopted; the offline gate missed all four confirmed OCR positives and
   left aggregate retrieval metrics unchanged. See the
   [M8.6 A/B report](rag-agent/docs/m8-gated-vision-retrieval-ab.md).
+  M9.1 evaluates fixed in-memory BM25 + RRF without changing the default RAG
+  pipeline. Hybrid+BGE improves Top-3 page 19/32 → 23/32 and normalized
+  evidence 14/32 → 17/32, preserving all baseline successes. Four original
+  retrieval failures enter Top-20; three reach final Top-3. See the
+  [M9.1 report](rag-agent/docs/m9-hybrid-retrieval-experiment.md).
   The [M8 plan](rag-agent/docs/superpowers/plans/2026-10-01-m8-document-intelligence.md)
   records the broader experiment scope.
 - [`rag-agent/components/industrial-preprocessor/`](rag-agent/components/industrial-preprocessor/README.md)
