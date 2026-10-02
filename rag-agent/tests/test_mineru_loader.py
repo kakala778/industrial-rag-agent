@@ -237,6 +237,138 @@ class MineruLoaderTests(unittest.TestCase):
         self.assertNotIn("SECRET_PAYLOAD", documents[0]["text"])
         self.assertEqual(documents[0]["metadata"]["block_type"], "image")
 
+    def test_structured_ocr_labels_image_text_without_changing_default(self):
+        middle_json = {
+            "pages": [
+                {
+                    "page_idx": 0,
+                    "blocks": [
+                        {
+                            "type": "image",
+                            "index": 6,
+                            "content": [
+                                {
+                                    "type": "image_caption",
+                                    "content": "Assembly overview",
+                                },
+                                {
+                                    "type": "image_body",
+                                    "content": "OCR label: UNIT-42 pressure 20 MPa",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        baseline = _documents_from_middle_json(middle_json, "manual.pdf")
+        enriched = _documents_from_middle_json(
+            middle_json, "manual.pdf", representation="structured_ocr"
+        )
+
+        self.assertEqual(
+            baseline[0]["text"],
+            "Assembly overview\nOCR label: UNIT-42 pressure 20 MPa",
+        )
+        self.assertEqual(
+            enriched[0]["text"],
+            "Caption: Assembly overview\nOCR text: OCR label: UNIT-42 pressure 20 MPa",
+        )
+        self.assertNotIn("bbox", baseline[0]["metadata"])
+
+    def test_structured_ocr_reads_explicit_text_child_and_strips_payload(self):
+        middle_json = {
+            "pages": [
+                {
+                    "page_idx": 0,
+                    "blocks": [
+                        {
+                            "type": "image",
+                            "content": [
+                                {
+                                    "type": "ocr_text",
+                                    "content": (
+                                        "Visible mark 804 "
+                                        "data:image/png;base64,PRIVATE_PAYLOAD"
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        documents = _documents_from_middle_json(
+            middle_json, "manual.pdf", representation="structured_ocr"
+        )
+
+        self.assertEqual(documents[0]["text"], "OCR text: Visible mark 804")
+        self.assertNotIn("PRIVATE_PAYLOAD", documents[0]["text"])
+
+    def test_structured_full_retains_text_group_block_geometry(self):
+        middle_json = {
+            "pages": [
+                {
+                    "page_idx": 1,
+                    "blocks": [
+                        {
+                            "type": "text",
+                            "index": 3,
+                            "bbox": [5, 10, 90, 30],
+                            "content": [{"type": "text", "content": "Valve note"}],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        documents = _documents_from_middle_json(
+            middle_json, "manual.pdf", representation="structured_full"
+        )
+        chunks = split_documents(documents)
+
+        expected_geometry = [{"type": "text", "index": 3, "bbox": [5, 10, 90, 30]}]
+        self.assertEqual(documents[0]["metadata"]["block_geometry"], expected_geometry)
+        self.assertEqual(chunks[0]["metadata"]["block_geometry"], expected_geometry)
+
+    def test_structured_full_preserves_visual_location_metadata_into_chunks(self):
+        middle_json = {
+            "pages": [
+                {
+                    "page_idx": 2,
+                    "blocks": [
+                        {
+                            "type": "image",
+                            "index": 9,
+                            "bbox": [10, 20, 110, 120],
+                            "sub_type": "figure",
+                            "continues_prev": False,
+                            "content": [
+                                {"type": "image_caption", "content": "Valve map"},
+                                {"type": "image_body", "content": "OCR valve marker"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        documents = _documents_from_middle_json(
+            middle_json, "manual.pdf", representation="structured_full"
+        )
+        chunks = split_documents(documents)
+
+        self.assertEqual(documents[0]["metadata"]["page"], 3)
+        self.assertEqual(documents[0]["metadata"]["block_type"], "image")
+        self.assertEqual(documents[0]["metadata"]["block_index"], 9)
+        self.assertEqual(documents[0]["metadata"]["image_index"], 9)
+        self.assertEqual(documents[0]["metadata"]["bbox"], [10, 20, 110, 120])
+        self.assertEqual(documents[0]["metadata"]["sub_type"], "figure")
+        self.assertEqual(documents[0]["metadata"]["caption"], "Valve map")
+        self.assertEqual(chunks[0]["metadata"]["bbox"], [10, 20, 110, 120])
+
     def test_table_image_payload_is_removed_while_cell_relationships_remain(self):
         middle_json = {
             "pages": [

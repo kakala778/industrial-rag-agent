@@ -3,6 +3,7 @@
 import hashlib
 from html.parser import HTMLParser
 import json
+import math
 import os
 import re
 import shutil
@@ -17,7 +18,7 @@ MINERU_VERSION = "4.0.5"
 MINERU_TIER = "advanced"
 MINERU_OCR_MODE = "ocr"
 CACHE_SCHEMA_VERSION = 1
-REPRESENTATIONS = {"flat", "structured"}
+REPRESENTATIONS = {"flat", "structured", "structured_ocr", "structured_full"}
 TEXT_BLOCK_TYPES = {
     "text",
     "paragraph_title",
@@ -299,7 +300,55 @@ def _block_children(block):
     return [content]
 
 
-def _typed_text_for_visual_block(block, block_type):
+def _labeled_image_text(block):
+    """Separate image captions from OCR-like text already present in Middle JSON."""
+    parts = []
+    caption_types = {"image_caption"}
+    footnote_types = {"image_footnote"}
+    ocr_types = {"image_body", "ocr_text", "image_text", "extracted_text"}
+    related_text_types = {"text", "ref_text"}
+
+    for child in _block_children(block):
+        if isinstance(child, str):
+            text = _image_body_text(child)
+            if text:
+                parts.append(f"OCR text: {text}")
+            continue
+        if not isinstance(child, dict):
+            continue
+
+        child_type = child.get("type")
+        if child_type in ocr_types:
+            text = _image_body_text(child.get("content"))
+            label = "OCR text"
+        elif child_type in caption_types:
+            text = "\n".join(_content_strings(child.get("content")))
+            label = "Caption"
+        elif child_type in footnote_types:
+            text = "\n".join(_content_strings(child.get("content")))
+            label = "Footnote"
+        elif child_type in related_text_types:
+            text = "\n".join(_content_strings(child.get("content")))
+            label = "Related text"
+        else:
+            continue
+        if text:
+            parts.append(f"{label}: {text}")
+
+    # Some MinerU exporters expose recognized text as block fields instead of
+    # typed children. Read only these allowlisted, human-readable fields.
+    for field in ("ocr_text", "image_text", "extracted_text"):
+        text = _image_body_text(block.get(field))
+        if text:
+            parts.append(f"OCR text: {text}")
+
+    return "\n".join(dict.fromkeys(parts)).strip()
+
+
+def _typed_text_for_visual_block(block, block_type, representation="structured"):
+    if block_type == "image" and representation in {"structured_ocr", "structured_full"}:
+        return _labeled_image_text(block)
+
     if block_type == "table":
         body_type = "table_body"
         text_types = {"table_caption", "table_footnote", "text", "ref_text"}
@@ -333,6 +382,54 @@ def _typed_text_for_visual_block(block, block_type):
     return "\n".join(parts).strip()
 
 
+def _valid_bbox(block):
+    bbox = block.get("bbox")
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return None
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        for value in bbox
+    ):
+        return None
+    return list(bbox)
+
+
+def _caption_for_visual_block(block, block_type):
+    caption_types = {
+        "table": {"table_caption"},
+        "chart": {"chart_caption"},
+        "image": {"image_caption"},
+    }.get(block_type, set())
+    captions = []
+    for child in _block_children(block):
+        if isinstance(child, dict) and child.get("type") in caption_types:
+            text = "\n".join(_content_strings(child.get("content")))
+            if text:
+                captions.append(text)
+    return "\n".join(dict.fromkeys(captions)) or None
+
+
+def _full_block_metadata(block, block_type, block_index):
+    metadata = {}
+    bbox = _valid_bbox(block)
+    if bbox is not None:
+        metadata["bbox"] = bbox
+    subtype = block.get("sub_type")
+    if isinstance(subtype, str) and subtype:
+        metadata["sub_type"] = subtype
+    continues_prev = block.get("continues_prev")
+    if isinstance(continues_prev, bool):
+        metadata["continues_prev"] = continues_prev
+    if block_type == "image":
+        metadata["image_index"] = block_index
+    caption = _caption_for_visual_block(block, block_type)
+    if caption:
+        metadata["caption"] = caption
+    return metadata
+
+
 def _block_index(block, fallback):
     value = block.get("index")
     if isinstance(value, int) and not isinstance(value, bool):
@@ -346,7 +443,7 @@ def _documents_from_middle_json(middle_json, source, representation="structured"
     if representation not in REPRESENTATIONS:
         raise ValueError(
             f"Unsupported MinerU representation: {representation!r}. "
-            "Choose 'flat' or 'structured'."
+            "Choose 'flat', 'structured', 'structured_ocr', or 'structured_full'."
         )
 
     pages = middle_json["pages"]
@@ -401,20 +498,25 @@ def _documents_from_middle_json(middle_json, source, representation="structured"
             text = "\n".join(part["text"] for part in text_group if part["text"]).strip()
             if text:
                 group_types = list(dict.fromkeys(part["type"] for part in text_group))
-                documents.append(
-                    {
-                        "text": text,
-                        "metadata": {
-                            "source": source,
-                            "page": page_idx + 1,
-                            "parser": "mineru",
-                            "representation": "structured",
-                            "block_type": "text_group",
-                            "block_index": text_group[0]["index"],
-                            "block_types": group_types,
-                        },
-                    }
-                )
+                metadata = {
+                    "source": source,
+                    "page": page_idx + 1,
+                    "parser": "mineru",
+                    "representation": representation,
+                    "block_type": "text_group",
+                    "block_index": text_group[0]["index"],
+                    "block_types": group_types,
+                }
+                if representation == "structured_full":
+                    metadata["block_geometry"] = [
+                        {
+                            key: part[key]
+                            for key in ("type", "index", "bbox")
+                            if key in part
+                        }
+                        for part in text_group
+                    ]
+                documents.append({"text": text, "metadata": metadata})
             text_group.clear()
 
         for block_position, block in enumerate(blocks):
@@ -429,29 +531,38 @@ def _documents_from_middle_json(middle_json, source, representation="structured"
                 text = "\n".join(_content_strings(block.get("content")))
                 if text:
                     text_group.append(
-                        {"text": text, "type": block_type, "index": block_index}
+                        {
+                            "text": text,
+                            "type": block_type,
+                            "index": block_index,
+                            **(
+                                {"bbox": _valid_bbox(block)}
+                                if _valid_bbox(block) is not None
+                                else {}
+                            ),
+                        }
                     )
                 continue
 
             flush_text_group()
             if block_type in {"table", "chart", "image"}:
-                text = _typed_text_for_visual_block(block, block_type)
+                text = _typed_text_for_visual_block(
+                    block, block_type, representation=representation
+                )
             else:
                 text = "\n".join(_content_strings(block.get("content")))
             if text:
-                documents.append(
-                    {
-                        "text": text,
-                        "metadata": {
-                            "source": source,
-                            "page": page_idx + 1,
-                            "parser": "mineru",
-                            "representation": "structured",
-                            "block_type": block_type or "unknown",
-                            "block_index": block_index,
-                        },
-                    }
-                )
+                metadata = {
+                    "source": source,
+                    "page": page_idx + 1,
+                    "parser": "mineru",
+                    "representation": representation,
+                    "block_type": block_type or "unknown",
+                    "block_index": block_index,
+                }
+                if representation == "structured_full":
+                    metadata.update(_full_block_metadata(block, block_type, block_index))
+                documents.append({"text": text, "metadata": metadata})
 
         flush_text_group()
 
@@ -553,7 +664,7 @@ def load_pdf_with_mineru(
     if representation not in REPRESENTATIONS:
         raise ValueError(
             f"Unsupported MinerU representation: {representation!r}. "
-            "Choose 'flat' or 'structured'."
+            "Choose 'flat', 'structured', 'structured_ocr', or 'structured_full'."
         )
     pdf_path = Path(path).expanduser()
     if not pdf_path.is_file():

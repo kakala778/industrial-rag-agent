@@ -499,6 +499,14 @@ class PdfEvaluationTests(unittest.TestCase):
         self.assertEqual(args.dataset, Path("qa.json"))
         self.assertEqual(args.parser, "mineru")
 
+    def test_cli_accepts_visual_representation_modes(self):
+        for representation in ("structured", "structured_ocr", "structured_full"):
+            with self.subTest(representation=representation):
+                args = build_argument_parser().parse_args(
+                    ["--parser", "mineru", "--representation", representation]
+                )
+                self.assertEqual(args.representation, representation)
+
     def test_single_pdf_rejects_a_dataset_with_multiple_sources(self):
         questions = [
             {"question": "Question for the selected PDF?", "source": "target.pdf"},

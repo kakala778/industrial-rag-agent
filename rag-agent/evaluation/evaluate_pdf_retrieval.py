@@ -1287,9 +1287,13 @@ def build_argument_parser():
     )
     parser.add_argument(
         "--representation",
-        choices=("structured", "flat"),
+        choices=("structured", "structured_ocr", "structured_full", "flat"),
         default="structured",
-        help="MinerU representation to evaluate (default: structured)",
+        help=(
+            "MinerU representation to evaluate (default: structured; "
+            "structured_ocr labels existing image text and structured_full "
+            "also preserves block geometry metadata)"
+        ),
     )
     parser.add_argument("--force-parse", action="store_true")
     parser.add_argument("--mineru-runner", type=Path)
