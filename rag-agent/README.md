@@ -6,6 +6,16 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
+## Current Stage — M10.1 complete; Agent next
+
+**ENTER AGENT.** The final pre-Agent RAG experiment is complete. Parent-context
+reranking remains offline and is not adopted in the application. Agent itself
+is not implemented; the next work is a bounded Document Research workflow with
+search, original-evidence lookup, task state and grounding checks. See the
+[Agent handoff](docs/agent-handoff.md) and [M10.1 results](docs/m10-parent-context-controlled-experiment.md).
+
+The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
+
 ## Frozen Baseline Status
 
 The `v0.5-local-rag-generation` tag freezes the M1–M5 baseline: Markdown and
@@ -51,6 +61,8 @@ Answer
   continuation chunks for context and citation display
 - Sentence Transformers embeddings
 - NumPy cosine-similarity Top-K retrieval
+- Optional MinerU structured PDF parsing, BGE reranking and BM25 + RRF Hybrid
+  retrieval in the PDF CLI; default selectors are unchanged
 - Markdown and PDF retrieval evaluation datasets and scripts
 - Local LLM generation through Ollama with `qwen3:4b`
 - Retrieved-source citations in the RAG CLI
@@ -75,7 +87,7 @@ Download the model:
 ollama pull qwen3:4b
 ```
 
-Run the Markdown RAG demo from the repository root. It reads local `.md` files
+Run the Markdown RAG demo from the `rag-agent/` application directory. It reads local `.md` files
 from `examples/docs/`:
 
 ```bash
