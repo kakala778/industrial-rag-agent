@@ -124,9 +124,10 @@ This baseline does not include:
 - Memory
 - Web API
 
-PDF loading is text-based. Scanned documents, complex tables, and layout-heavy
-documents are not handled reliably. Real project and teacher-provided data
-must remain out of the repository.
+The default PyMuPDF loader extracts page text without OCR. The optional MinerU
+parser supports Advanced + OCR and structured blocks, but OCR accuracy, image
+information and layout relationships remain limited. Real project and
+teacher-provided data must remain out of the repository.
 
 ## Long-term Planned Pipeline
 
@@ -693,6 +694,13 @@ with both retrievers; Q33 triggered the existing refusal phrase. These checks
 are not a new generation-quality benchmark. Dense remains the default. See the
 [M9.3 implementation note](docs/m9-optional-hybrid-integration.md).
 
+## M10.1 — Parent Context Controlled Experiment
+
+Bounded parent context showed limited benefit in table cases and remains
+experimental. Q25/I17 improved, but Q04 regressed and reranking cost increased;
+the strategy was not adopted in the RAG application. The next stage is Agent,
+with defaults unchanged. See the [M10.1 report](docs/m10-parent-context-controlled-experiment.md).
+
 ## Companion Component: Industrial Preprocessor
 
 The reusable preprocessing source is included under
@@ -736,6 +744,7 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M9.1 — Hybrid retrieval controlled experiment (offline; default unchanged)
 - [x] M9.2 — Independent validation and ranking audit (offline; page regressions recorded)
 - [x] M9.3 — Optional Hybrid retrieval integration (Dense remains default)
+- [x] M10.1 — Parent context controlled experiment (offline; not adopted)
 - [ ] Agent
 - [ ] Industrial document improvements
 
