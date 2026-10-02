@@ -628,6 +628,33 @@ Individual experiment arms support `--retriever dense|bm25|hybrid` and
 `--rerank on|off`; anonymous outputs remain under ignored
 `outputs/m9_hybrid_retrieval/`. No vector database or new dependency is added.
 
+## M9.2 — Independent Validation + Ranking Audit
+
+21 new questions cover all eight local PDFs and eight categories; original-PDF
+visual review and the QA/configuration manifest were completed before inference.
+Fixed Hybrid+BGE improves evidence 12/21 → 15/21 and Recall@20 12/21 → 16/21.
+Top-3 page stays 17/21: two gains and two page regressions, despite zero evidence
+regressions. Independent data supports optional Hybrid integration, with page
+localization checks; the default pipeline remains unchanged.
+
+Q07/Q19/Q24/Q25 audits identify notation matching, underspecified query scope,
+legitimate repeated fields and table chunk-context limitations. These do not
+establish BGE as the main bottleneck. See the
+[M9.2 report](docs/m9-independent-validation-and-ranking-audit.md).
+
+```powershell
+# One-time freeze after authoring and reviewing the ignored local QA:
+python evaluation/run_m9_independent_validation.py --freeze
+# Five fixed arms; subsequent replay uses this command without --freeze:
+python evaluation/run_m9_independent_validation.py
+# Historical candidate audit without model loading:
+python evaluation/run_m9_independent_validation.py --audit-only
+```
+
+QA and detailed outputs stay under ignored `outputs/m9_independent_validation/`
+and `outputs/m9_ranking_audit/`. No BM25/RRF, chunking, representation, model or
+prompt parameter was changed; no vector database was added.
+
 ## Companion Component: Industrial Preprocessor
 
 The reusable preprocessing source is included under
@@ -669,6 +696,7 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M8.5 — Focused OCR comparison (offline; handwritten regions and Q17 matcher discrepancy remain open)
 - [x] M8.6 — Gated focused-VLM retrieval A/B (offline; gate not adopted)
 - [x] M9.1 — Hybrid retrieval controlled experiment (offline; default unchanged)
+- [x] M9.2 — Independent validation and ranking audit (offline; page regressions recorded)
 - [ ] Agent
 - [ ] Industrial document improvements
 
