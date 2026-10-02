@@ -6,9 +6,37 @@ from pathlib import Path
 
 import pymupdf
 
+if __package__:
+    from . import mineru_loader
+else:
+    import mineru_loader
 
-def load_pdf(path):
-    """Return one document per PDF page, with a 1-based page number."""
+
+def load_pdf(
+    path,
+    parser="pymupdf",
+    *,
+    force=False,
+    runner_path=None,
+    cache_root=None,
+    powershell_executable=None,
+    representation="structured",
+):
+    """Load PDF content as unified documents with 1-based page metadata."""
+    if parser == "mineru":
+        return mineru_loader.load_pdf_with_mineru(
+            path,
+            force=force,
+            runner_path=runner_path,
+            cache_root=cache_root,
+            powershell_executable=powershell_executable,
+            representation=representation,
+        )
+    if parser != "pymupdf":
+        raise ValueError(
+            f"Unsupported PDF parser: {parser!r}. Choose 'pymupdf' or 'mineru'."
+        )
+
     pdf_path = Path(path)
     if not pdf_path.is_file():
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")

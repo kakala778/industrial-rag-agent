@@ -104,27 +104,43 @@ def build_prompt(question, context):
     return PROMPT_TEMPLATE.format(context=context, question=question)
 
 
-def format_sources(results, section_by_chunk=None):
+def format_sources(results, section_by_chunk=None, *, include_score=True):
     """Format unique retrieved sources with section and retrieval metadata."""
     citations = []
     seen = set()
 
     for result in results:
-        metadata = result.get("metadata", {})
+        metadata = result.get("metadata") or {}
         page = metadata.get("page")
+        block_type = metadata.get("block_type")
+        block_index = metadata.get("block_index")
         section = get_section(result, section_by_chunk)
-        citation_key = (result["source"], section, page, result["chunk_id"])
+        citation_key = (
+            result["source"],
+            section,
+            page,
+            block_type,
+            block_index,
+            result["chunk_id"],
+        )
         if citation_key in seen:
             continue
         seen.add(citation_key)
         page_line = f"Page:\n{page}\n\n" if page is not None else ""
+        block_lines = ""
+        if block_type is not None:
+            block_lines += f"Block type:\n{block_type}\n\n"
+        if block_index is not None:
+            block_lines += f"Block index:\n{block_index}\n\n"
+        score_line = f"Score:\n{result['score']:.4f}" if include_score else ""
         citations.append(
             f"[{len(citations) + 1}]\n"
             f"File:\n{result['source']}\n\n"
             f"Section:\n{section}\n\n"
             f"{page_line}"
+            f"{block_lines}"
             f"Chunk:\n{result['chunk_id']}\n\n"
-            f"Score:\n{result['score']:.4f}"
+            f"{score_line}"
         )
 
     return "\n\n".join(citations)
