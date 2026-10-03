@@ -89,3 +89,37 @@ class DeepSeekSelectorTests(unittest.TestCase):
         with patch.dict(os.environ, {'DEEPSEEK_API_KEY':'test-only-token'}), patch('src.agent.deepseek_selector.urlopen') as http:
             with self.assertRaisesRegex(RuntimeError,'cost_limit'): DeepSeekActionSelector(budget=budget)(self.state())
             http.assert_not_called()
+
+    def test_evidence_reference_contract_uses_id_status_schema_and_no_quotes(self):
+        from src.agent.deepseek_selector import DeepSeekActionSelector
+        state = self.state()
+        state.search_history = [
+            {"scopes": ["A"], "query": "pressure", "status": "ok",
+             "results": [{"evidence_id": "ev_a", "source": "A"}]},
+            {"scopes": ["B"], "query": "pressure", "status": "ok",
+             "results": [{"evidence_id": "ev_b", "source": "B"}]},
+        ]
+        state.evidence_ids = ["ev_a", "ev_b"]
+        state.looked_up_evidence = {"ev_a": {"source": "A"}, "ev_b": {"source": "B"}}
+        state.remaining_budget = {"steps": 1, "search": 2, "lookup": 4}
+        action = {"action": "FINISH", "outcomes": [
+            {"scope": "A", "status": "supported", "claim": "supports rating",
+             "evidence_ids": ["ev_a"]},
+            {"scope": "B", "status": "insufficient_evidence"},
+        ]}
+        payloads = []
+        def transport(request, timeout):
+            payloads.append(json.loads(request.data))
+            body = {"choices": [{"message": {"content": json.dumps(action)}}], "usage": {}}
+            return io.BytesIO(json.dumps(body).encode())
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-only-token"}), \
+             patch("src.agent.deepseek_selector.urlopen", side_effect=transport):
+            selector = DeepSeekActionSelector(action_contract="evidence_reference")
+            self.assertEqual(selector(state), action)
+        prompt = payloads[0]["messages"][0]["content"]
+        schema = json.loads(payloads[0]["messages"][1]["content"])["action_schema"]
+        self.assertIn("Never provide source quotes", prompt)
+        finish = next(row for row in schema["oneOf"]
+                      if row["properties"]["action"]["const"] == "FINISH")
+        self.assertIn("outcomes", finish["properties"])
+        self.assertNotIn("findings", finish["properties"])

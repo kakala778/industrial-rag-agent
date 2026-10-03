@@ -30,7 +30,25 @@ def _text(value, maximum):
     return isinstance(value, str) and bool(value.strip()) and len(value) <= maximum
 
 
-def validate_action(raw):
+REFERENCE_OUTCOME_SCHEMA = {
+    "oneOf": [
+        {"type": "object", "properties": {
+            "scope": {"type": "string"}, "status": {"const": "supported"},
+            "claim": {"type": "string", "maxLength": 1000},
+            "evidence_ids": {"type": "array", "items": {"type": "string"},
+                             "minItems": 1, "maxItems": 3}},
+         "required": ["scope", "status", "claim", "evidence_ids"],
+         "additionalProperties": False},
+        {"type": "object", "properties": {
+            "scope": {"type": "string"}, "status": {"const": "insufficient_evidence"}},
+         "required": ["scope", "status"], "additionalProperties": False},
+        {"type": "object", "properties": {
+            "scope": {"type": "string"}, "status": {"const": "no_candidates"}},
+         "required": ["scope", "status"], "additionalProperties": False},
+    ]}
+
+
+def validate_action(raw, *, contract="copied_quote"):
     if isinstance(raw, str):
         if len(raw) > 32000:
             raise InvalidAction("action too long")
@@ -38,13 +56,16 @@ def validate_action(raw):
             raw = json.loads(raw, object_pairs_hook=_object, parse_constant=_nonfinite)
         except (ValueError, RecursionError) as exc:
             raise InvalidAction("invalid JSON action") from exc
+    if contract not in ("copied_quote", "evidence_reference"):
+        raise ValueError("unknown action contract")
     if not isinstance(raw, dict):
         raise InvalidAction("action must be an object")
     action = raw.get("action")
     keys = {"SEARCH": {"action", "query", "scopes"},
             "LOOKUP": {"action", "evidence_id"},
             "CLARIFY": {"action", "question"},
-            "FINISH": {"action", "findings"}}
+            "FINISH": {"action", "findings"} if contract == "copied_quote"
+                     else {"action", "outcomes"}}
     if not isinstance(action, str) or action not in keys or set(raw) != keys[action]:
         raise InvalidAction("unknown action or unexpected fields")
     if action == "SEARCH":
@@ -59,14 +80,40 @@ def validate_action(raw):
         if not _text(raw["question"], 500):
             raise InvalidAction("invalid CLARIFY arguments")
     else:
-        findings = raw["findings"]
-        if not isinstance(findings, list) or len(findings) > 6:
-            raise InvalidAction("invalid findings")
-        for row in findings:
-            if (not isinstance(row, dict) or set(row) != {"scope", "evidence_id", "quote"}
-                    or not _text(row["scope"], 64) or not _text(row["evidence_id"], 100)
-                    or not _text(row["quote"], 1000)):
-                raise InvalidAction("invalid finding")
+        if contract == "copied_quote":
+            findings = raw["findings"]
+            if not isinstance(findings, list) or len(findings) > 6:
+                raise InvalidAction("invalid findings")
+            for row in findings:
+                if (not isinstance(row, dict) or set(row) != {"scope", "evidence_id", "quote"}
+                        or not _text(row["scope"], 64) or not _text(row["evidence_id"], 100)
+                        or not _text(row["quote"], 1000)):
+                    raise InvalidAction("invalid finding")
+        else:
+            outcomes = raw["outcomes"]
+            if not isinstance(outcomes, list) or len(outcomes) != 2:
+                raise InvalidAction("invalid scope outcomes")
+            seen_scopes = set()
+            for row in outcomes:
+                if not isinstance(row, dict) or not _text(row.get("scope"), 64):
+                    raise InvalidAction("invalid scope outcome")
+                if row["scope"] in seen_scopes:
+                    raise InvalidAction("duplicate scope outcome")
+                seen_scopes.add(row["scope"])
+                status = row.get("status")
+                if status == "supported":
+                    ids = row.get("evidence_ids")
+                    if (set(row) != {"scope", "status", "claim", "evidence_ids"}
+                            or not _text(row["claim"], 1000) or not isinstance(ids, list)
+                            or not 1 <= len(ids) <= 3
+                            or any(not _text(eid, 100) for eid in ids)
+                            or len(set(ids)) != len(ids)):
+                        raise InvalidAction("invalid supported outcome")
+                elif status in ("insufficient_evidence", "no_candidates"):
+                    if set(row) != {"scope", "status"}:
+                        raise InvalidAction("unsupported outcome carries evidence")
+                else:
+                    raise InvalidAction("unknown scope outcome")
     return raw
 
 
@@ -91,4 +138,16 @@ ACTION_JSON_SCHEMA = {
                     "required": ["scope", "evidence_id", "quote"],
                     "additionalProperties": False}}},
          "required": ["action", "findings"], "additionalProperties": False},
+    ]}
+
+
+REFERENCE_ACTION_JSON_SCHEMA = {
+    "oneOf": [
+        ACTION_JSON_SCHEMA["oneOf"][0], ACTION_JSON_SCHEMA["oneOf"][1],
+        ACTION_JSON_SCHEMA["oneOf"][2],
+        {"type": "object", "properties": {
+            "action": {"const": "FINISH"},
+            "outcomes": {"type": "array", "minItems": 2, "maxItems": 2,
+                          "items": REFERENCE_OUTCOME_SCHEMA}},
+         "required": ["action", "outcomes"], "additionalProperties": False},
     ]}

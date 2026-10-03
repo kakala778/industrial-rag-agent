@@ -19,8 +19,8 @@ def main(argv=None):
     parser.add_argument("--scopes", nargs=2)
     parser.add_argument("--parser", choices=("pymupdf", "mineru"), default="pymupdf")
     parser.add_argument("--cache-root")
-    parser.add_argument("--policy", choices=("deterministic", "qwen", "deepseek"), default="deterministic",
-                        help="deepseek sends query/evidence excerpts to the paid official API")
+    parser.add_argument("--policy", choices=("deterministic", "qwen", "deepseek", "deepseek-reference"), default="deterministic",
+                        help="DeepSeek policies send query/evidence excerpts to the paid official API")
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--max-search-calls", type=int, default=4)
     parser.add_argument("--max-lookup-calls", type=int, default=6)
@@ -34,13 +34,15 @@ def main(argv=None):
     if any(s not in aliases for s in args.scopes):
         print(json.dumps({"status": "invalid_scope"}))
         return 2
-    if args.policy == "deepseek" and not os.environ.get("DEEPSEEK_API_KEY", "").strip():
+    if args.policy in ("deepseek", "deepseek-reference") and not os.environ.get("DEEPSEEK_API_KEY", "").strip():
         print(json.dumps({"status": "error", "message": "deepseek:missing_key"}))
         return 1
     try:
         corpus = load_corpus(args.document, parser=args.parser, cache_root=args.cache_root)
         session = KnowledgeBaseSession(corpus)
-        policy = (DeepSeekActionSelector() if args.policy == "deepseek" else
+        policy = (DeepSeekActionSelector(action_contract="evidence_reference")
+                  if args.policy == "deepseek-reference" else
+                  DeepSeekActionSelector() if args.policy == "deepseek" else
                   OllamaActionSelector() if args.policy == "qwen" else DeterministicPolicy())
         state = AgentHarness(session, policy, max_steps=args.max_steps,
                              max_search_calls=args.max_search_calls,

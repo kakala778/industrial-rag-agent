@@ -1,6 +1,7 @@
 """Choose → validate → execute → observe → update → terminate."""
 
 from copy import deepcopy
+import json
 
 from .actions import InvalidAction, finish_ready, validate_action
 from .state import AgentState
@@ -15,6 +16,9 @@ class AgentHarness:
             if type(value) is not int or value < 0:
                 raise ValueError("budgets must be nonnegative integers")
         self.session, self.selector = session, selector
+        self.action_contract = getattr(selector, "action_contract", "copied_quote")
+        if self.action_contract not in ("copied_quote", "evidence_reference"):
+            raise ValueError("unknown action contract")
         self.max_steps, self.max_search_calls = max_steps, max_search_calls
         self.max_lookup_calls = max_lookup_calls
 
@@ -25,6 +29,7 @@ class AgentHarness:
                                 tool_input=deepcopy(inputs), tool_status=status,
                                 observation_summary=summary,
                                 state_transition=f"running->{state.status}",
+                                terminal_status=state.status if state.status != "running" else None,
                                 progress=deepcopy(state.progress)))
 
     def run(self, query, scopes=None, *, clarification_required=""):
@@ -70,7 +75,8 @@ class AgentHarness:
             action = None
             try:
                 # Selectors receive a snapshot: they cannot bypass validation by mutation.
-                action = validate_action(self.selector(deepcopy(state)))
+                action = validate_action(self.selector(deepcopy(state)),
+                                         contract=self.action_contract)
                 self._validate_state_action(state, action)
             except InvalidAction as exc:
                 state.status, state.answer = "invalid_action", "动作无效，已停止，未执行该动作的工具。"
@@ -97,10 +103,27 @@ class AgentHarness:
                 state.status, state.answer = "clarify", action["question"]
                 self._trace(state, kind, inputs, "ok", "clarification requested")
             elif kind == "FINISH":
-                self._finish(state, action["findings"])
-                # Do not duplicate raw evidence quotes into execution trace.
-                self._trace(state, kind, {"evidence_ids": [f["evidence_id"] for f in state.findings]},
-                            "ok", f"{len(state.findings)} grounded excerpts; {state.comparison}")
+                if self.action_contract == "copied_quote":
+                    self._finish(state, action["findings"])
+                    inputs = {"evidence_ids": [f["evidence_id"] for f in state.findings]}
+                    summary = f"{len(state.findings)} grounded excerpts; {state.comparison}"
+                else:
+                    inputs = {"scope_statuses": [{"scope": row["scope"], "status": row["status"]}
+                                                 for row in action["outcomes"]],
+                              "evidence_ids": [eid for row in action["outcomes"]
+                                               for eid in row.get("evidence_ids", [])]}
+                    try:
+                        self._finish_references(state, action["outcomes"])
+                    except InvalidAction:
+                        state.status, state.answer = "invalid_action", "宿主无法生成有效引用；未返回 findings。"
+                        state.errors.append("reference:render_failed")
+                        self._trace(state, kind, inputs, "invalid_action",
+                                    {"terminal_status": state.status,
+                                     "scope_statuses": inputs["scope_statuses"],
+                                     "evidence_ids": inputs["evidence_ids"]})
+                        break
+                    summary = self._reference_trace_summary(state)
+                self._trace(state, kind, inputs, "ok", summary)
             else:
                 if repeated_action(state, action):
                     self._trace(state, kind, inputs, "no_progress", "unchanged successful action; tool not executed")
@@ -124,15 +147,38 @@ class AgentHarness:
         elif kind == "FINISH":
             if not finish_ready(state):
                 raise InvalidAction("unsearched or unlooked-up comparison scope")
-            seen = set()
-            for finding in action["findings"]:
-                evidence = state.looked_up_evidence.get(finding["evidence_id"])
-                if (evidence is None or finding["scope"] not in state.resolved_scopes
-                        or finding["scope"] != evidence["source"]
-                        or finding["quote"] not in evidence["text"]
-                        or finding["evidence_id"] in seen):
-                    raise InvalidAction("unsupported finding")
-                seen.add(finding["evidence_id"])
+            if self.action_contract == "copied_quote":
+                seen = set()
+                for finding in action["findings"]:
+                    evidence = state.looked_up_evidence.get(finding["evidence_id"])
+                    if (evidence is None or finding["scope"] not in state.resolved_scopes
+                            or finding["scope"] != evidence["source"]
+                            or finding["quote"] not in evidence["text"]
+                            or finding["evidence_id"] in seen):
+                        raise InvalidAction("unsupported finding")
+                    seen.add(finding["evidence_id"])
+            else:
+                if ({row["scope"] for row in action["outcomes"]} != set(state.resolved_scopes)
+                        or len(action["outcomes"]) != len(state.resolved_scopes)):
+                    raise InvalidAction("scope outcomes must cover each resolved scope once")
+                seen = set()
+                candidates = {scope: [r for h in state.search_history
+                                      if h["scopes"][0] == scope and h.get("status") == "ok"
+                                      for r in h["results"]] for scope in state.resolved_scopes}
+                for outcome in action["outcomes"]:
+                    scope, status = outcome["scope"], outcome["status"]
+                    if status == "no_candidates" and candidates[scope]:
+                        raise InvalidAction("no_candidates contradicts observed candidates")
+                    if status == "insufficient_evidence" and not candidates[scope]:
+                        raise InvalidAction("insufficient_evidence requires observed candidates")
+                    if status == "supported":
+                        for evidence_id in outcome["evidence_ids"]:
+                            evidence = state.looked_up_evidence.get(evidence_id)
+                            if (evidence_id in seen or evidence_id not in state.evidence_ids
+                                    or evidence is None or evidence.get("source") != scope
+                                    or not self._owns_session_evidence(evidence_id)):
+                                raise InvalidAction("evidence reference is not active, observed, looked up and in scope")
+                            seen.add(evidence_id)
 
     def _budget(self, state, reason, kind="BUDGET", inputs=None):
         state.status, state.answer = "budget_exceeded", "执行预算已耗尽；调查未完成。"
@@ -202,3 +248,56 @@ class AgentHarness:
             lines.append("摘录文本相同。" if state.comparison == "same_text" else "摘录文本不同。")
             lines.append("这只是证据文本核对；参数含义、适用条件及语义一致性仍需复核。")
         state.answer = "\n\n".join(lines)
+
+    def _session(self):
+        session = self.session
+        seen = set()
+        while not hasattr(session, "registry") and hasattr(session, "session") and id(session) not in seen:
+            seen.add(id(session))
+            session = session.session
+        return session
+
+    def _owns_session_evidence(self, evidence_id):
+        registry = getattr(self._session(), "registry", None)
+        return isinstance(registry, dict) and evidence_id in registry
+
+    def _render_reference(self, evidence_id):
+        renderer = getattr(self._session(), "render_evidence_reference", None)
+        if not callable(renderer):
+            raise InvalidAction("session cannot render evidence references")
+        try:
+            return renderer(evidence_id)
+        except (KeyError, ValueError) as exc:
+            raise InvalidAction("host reference rendering failed") from exc
+
+    def _finish_references(self, state, outcomes):
+        findings = []
+        for outcome in outcomes:
+            row = {"scope": outcome["scope"], "status": outcome["status"]}
+            if outcome["status"] == "supported":
+                row["claim"] = outcome["claim"]
+                row["evidence"] = [self._render_reference(evidence_id)
+                                   for evidence_id in outcome["evidence_ids"]]
+            findings.append(row)
+        state.findings = findings
+        state.status = "finished"
+        state.comparison = "not_evaluated"
+        state.answer = json.dumps({"comparison": state.comparison, "findings": findings},
+                                  ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def _reference_trace_summary(state):
+        host_spans = []
+        provenance = []
+        for row in state.findings:
+            for evidence in row.get("evidence", []):
+                host_spans.append({"scope": row["scope"], "evidence_id": evidence["evidence_id"],
+                                   "span": deepcopy(evidence["span"])})
+                provenance.append({"scope": row["scope"], "evidence_id": evidence["evidence_id"],
+                                   **{key: evidence[key] for key in
+                                      ("source", "page", "block_type", "block_index", "chunk_id",
+                                       "excerpt_sha256")}})
+        return {"scope_statuses": [{"scope": row["scope"], "status": row["status"]}
+                                   for row in state.findings],
+                "host_spans": host_spans, "citation_provenance": provenance,
+                "terminal_status": state.status}

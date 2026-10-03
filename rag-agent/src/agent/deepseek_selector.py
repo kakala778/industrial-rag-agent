@@ -33,12 +33,16 @@ class ApiCostBudget:
 
 
 class DeepSeekActionSelector:
-    def __init__(self, *, timeout=120, max_tokens=512, retries=1, budget=None):
+    def __init__(self, *, timeout=120, max_tokens=512, retries=1, budget=None,
+                 action_contract="copied_quote"):
         if isinstance(timeout,bool) or not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or timeout<=0:
             raise ValueError("invalid selector timeout")
         if type(max_tokens) is not int or not 1<=max_tokens<=512 or type(retries) is not int or retries not in (0,1):
             raise ValueError("invalid selector limits")
+        if action_contract not in ("copied_quote", "evidence_reference"):
+            raise ValueError("invalid action contract")
         self.timeout, self.max_tokens, self.retries = timeout, max_tokens, retries
+        self.action_contract = action_contract
         self.budget=budget
         self.events=[]
 
@@ -46,7 +50,7 @@ class DeepSeekActionSelector:
         key=os.environ.get('DEEPSEEK_API_KEY','').strip()
         if not key:
             raise RuntimeError('deepseek:missing_key')
-        payload=dict(model='deepseek-flash', messages=selector_messages(state),
+        payload=dict(model='deepseek-flash', messages=selector_messages(state,contract=self.action_contract),
                      thinking={'type':'disabled'}, response_format={'type':'json_object'},
                      stream=False, temperature=0, max_tokens=self.max_tokens)
         data=json.dumps(payload,ensure_ascii=False).encode('utf-8')
@@ -72,7 +76,7 @@ class DeepSeekActionSelector:
                     raise InvalidAction('empty action content')
                 if body['choices'][0].get('finish_reason')=='length':
                     raise InvalidAction('truncated action')
-                return parse_selector_action(content,state)
+                return parse_selector_action(content,state,contract=self.action_contract)
             except HTTPError as exc:
                 event['error']='http_'+str(exc.code)
                 exc.close()

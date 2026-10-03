@@ -62,10 +62,24 @@ def render_selected_ids(selection,observed_ids,looked_up):
     return rendered
 
 
-def candidate_group(oracle,candidate_reviews):
+def candidate_group(oracle,candidate_reviews,*,candidate_ids=None):
     if not oracle: return 'PREFLIGHT_CONTROL'
     if any(o.get('expected_available') is None for o in oracle.values()): return 'UNASSESSED'
     required={s for s,o in oracle.items() if o.get('expected_available') is True}
+    explicit_ids=any('expected_evidence_ids' in o for o in oracle.values())
+    if explicit_ids:
+        if any(not isinstance(oracle[s].get('expected_evidence_ids'),list)
+               or not oracle[s]['expected_evidence_ids'] for s in required):
+            return 'UNASSESSED'
+        observed=set(candidate_reviews) if candidate_ids is None else set(candidate_ids)
+        for scope in required:
+            expected=set(oracle[scope]['expected_evidence_ids'])
+            if not any(evidence_id in observed
+                       and candidate_reviews.get(evidence_id,{}).get('scope')==scope
+                       and candidate_reviews.get(evidence_id,{}).get('label')=='RELEVANT'
+                       for evidence_id in expected):
+                return 'RETRIEVAL_BOUND'
+        return 'CANDIDATE_AVAILABLE'
     available={r['scope'] for r in candidate_reviews.values() if r['label']=='RELEVANT'}
     return 'CANDIDATE_AVAILABLE' if required<=available else 'RETRIEVAL_BOUND'
 
@@ -73,13 +87,26 @@ def candidate_group(oracle,candidate_reviews):
 def score_selection(state,actions,oracle,candidate_reviews,*,finding_reviews=None):
     finish=next((a for a in reversed(actions) if a['action']=='FINISH'),None)
     findings=finish['findings'] if finish else []
+    observed={r['evidence_id'] for search in state.get('search_history',[])
+              for r in search.get('results',[]) if isinstance(r,dict) and 'evidence_id' in r}
+    explicit_ids=bool(oracle) and any('expected_evidence_ids' in o for o in oracle.values())
     rows=[]
     for f in findings:
         evidence=state['looked_up_evidence'].get(f['evidence_id'])
-        eligible=evidence is not None and f['evidence_id'] in state['evidence_ids'] and evidence['source']==f['scope']
+        eligible=(evidence is not None and f['evidence_id'] in state['evidence_ids']
+                  and evidence['source']==f['scope']
+                  and (not explicit_ids or f['evidence_id'] in observed))
         candidate=candidate_reviews.get(f['evidence_id'],{})
+        expected_ids=(oracle or {}).get(f['scope'],{}).get('expected_evidence_ids')
+        expected_id_match=(f['evidence_id'] in expected_ids
+                           if isinstance(expected_ids,list) else None)
+        expected_id_correct=(expected_id_match is True if explicit_ids
+                             else expected_id_match is not False)
         row=dict(scope=f['scope'],evidence_id=f['evidence_id'],eligible_id=eligible,
                  id_label=candidate.get('label','UNCERTAIN') if eligible else 'INVALID_ID',
+                 expected_id_match=expected_id_match,
+                 correct_expected_id=bool(eligible and candidate.get('label')=='RELEVANT'
+                                          and expected_id_correct),
                  id_alignment={k:candidate.get(k) for k in ('field_alignment','unit_alignment','condition_alignment','scope_alignment')},
                  quote_fidelity=quote_fidelity(f['quote'],evidence['text']) if eligible else 'NOT_FAITHFUL',
                  quote_review=review_finding(f,evidence,(oracle or {}).get(f['scope'])))
@@ -96,8 +123,8 @@ def score_selection(state,actions,oracle,candidate_reviews,*,finding_reviews=Non
                     raise ValueError('invalid alignment review')
             row['quote_review']={k:review[k] for k in ('label','field_alignment','unit_alignment','condition_alignment','scope_alignment')}
     required={s for s,o in (oracle or {}).items() if o.get('expected_available') is True}
-    correct={r['scope'] for r in rows if r['eligible_id'] and r['id_label']=='RELEVANT'}
-    id_success=bool(finish and required<=correct and all(r['eligible_id'] and r['id_label']=='RELEVANT' for r in rows))
+    correct={r['scope'] for r in rows if r['correct_expected_id']}
+    id_success=bool(finish and required<=correct and all(r['correct_expected_id'] for r in rows))
     full=bool(state['status'] in ('finished','incomplete') and id_success and all(
         r['quote_fidelity']=='EXACT' and r['quote_review']['label']=='RELEVANT' for r in rows))
     prototype=[]
@@ -107,7 +134,10 @@ def score_selection(state,actions,oracle,candidate_reviews,*,finding_reviews=Non
     except ValueError:
         id_success=False
         full=False
-    return dict(group=candidate_group(oracle,candidate_reviews),finish_attempted=finish is not None,
+    return dict(group=candidate_group(oracle,candidate_reviews,candidate_ids=observed),
+                expected_id_mode=explicit_ids,
+                correct_evidence_ids=sum(r['correct_expected_id'] for r in rows),
+                attempted_evidence_ids=len(rows),finish_attempted=finish is not None,
                 review_method='offline_finding_review' if finding_reviews is not None else 'frozen_lexical_screen',
                 id_selection_success=id_success,fully_relevant_task_success=full,
                 quote_fidelity=[r['quote_fidelity'] for r in rows],findings=rows,

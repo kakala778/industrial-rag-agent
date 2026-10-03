@@ -18,6 +18,8 @@ SAFE_ALIAS = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 PROVENANCE_KEYS = ("source", "page", "block_type", "block_index", "chunk_id")
 TOOL_STATUSES = {"ok", "no_evidence", "invalid_scope", "invalid_evidence_id",
                  "timeout", "error"}
+REFERENCE_MAX_CHARS = 1200
+TEXT_CONTEXT_CHARS = 200
 
 
 @dataclass
@@ -67,6 +69,15 @@ class KnowledgeBaseSession:
                     raise ValueError("block index must be a nonnegative integer")
                 metadata = dict(source=alias, page=page, block_type=block_type,
                                 block_index=block_index)
+                if "table_header_rows" in meta:
+                    header_rows = meta["table_header_rows"]
+                    row_count = len(original["text"].splitlines())
+                    if (block_type != "table" or not isinstance(header_rows, (list, tuple))
+                            or len(header_rows) > 3
+                            or any(type(i) is not int or i < 0 or i >= row_count for i in header_rows)
+                            or len(set(header_rows)) != len(header_rows)):
+                        raise ValueError("invalid structural table header rows")
+                    metadata["table_header_rows"] = tuple(header_rows)
                 parent_key = (alias, page, block_type, block_index)
                 if parent_key in self._parents:
                     raise ValueError("ambiguous parent identity")
@@ -165,3 +176,81 @@ class KnowledgeBaseSession:
                        else "parent_neighborhood", truncated=len(parent) > 2000)
         row["provenance"] = {key: row[key] for key in PROVENANCE_KEYS}
         return ToolResult("ok", [row])
+
+    def render_evidence_reference(self, evidence_id):
+        """Return bounded original text and active-session provenance for one ID.
+
+        This is an authenticity renderer only. It uses structural offsets and
+        explicit table-header metadata, never query labels or relevance data.
+        """
+        if not isinstance(evidence_id, str) or evidence_id not in self.registry:
+            raise ValueError("unknown session evidence ID")
+        row = self.registry[evidence_id]
+        parent_record = self._parents[tuple(row[key] for key in PROVENANCE_KEYS[:-1])]
+        parent, child = parent_record["text"], row["text"]
+        if len(child) > REFERENCE_MAX_CHARS:
+            raise ValueError("evidence child exceeds reference bound")
+        positions = []
+        start = 0
+        while True:
+            found = parent.find(child, start)
+            if found < 0:
+                break
+            positions.append(found)
+            start = found + 1
+        unique = len(positions) == 1
+        ranges = None
+        kind = "child_only_ambiguous"
+        child_start = child_end = None
+        if unique:
+            child_start, child_end = positions[0], positions[0] + len(child)
+            if row["block_type"] == "table":
+                line_ranges = []
+                offset = 0
+                for line in parent.splitlines(keepends=True):
+                    line_ranges.append((offset, offset + len(line)))
+                    offset += len(line)
+                if offset < len(parent):
+                    line_ranges.append((offset, len(parent)))
+                target_rows = [i for i, (a, b) in enumerate(line_ranges)
+                               if a < child_end and b > child_start]
+                header_rows = parent_record["metadata"].get("table_header_rows", ())
+                if target_rows:
+                    selected = sorted(set(target_rows) | set(header_rows))
+                    proposed = [{"start": line_ranges[i][0], "end": line_ranges[i][1]}
+                                for i in selected]
+                    if sum(r["end"] - r["start"] for r in proposed) <= REFERENCE_MAX_CHARS:
+                        ranges = proposed
+                        kind = "table_rows_with_header" if set(header_rows) - set(target_rows) else "table_rows"
+                    else:
+                        kind = "child_only_row_too_long"
+                else:
+                    kind = "child_only_row_unmapped"
+            else:
+                lower = max(0, child_start - TEXT_CONTEXT_CHARS)
+                upper = min(len(parent), child_end + TEXT_CONTEXT_CHARS)
+                boundaries = list(re.finditer(r"(?:[。！？!?；;]\s*|\n+|\.(?=\s))", parent))
+                before = [m.end() for m in boundaries if m.end() <= child_start]
+                after = [m.end() for m in boundaries if child_end <= m.start() < upper]
+                span_start = before[-2] if len(before) > 1 and before[-2] >= lower else lower
+                span_end = after[0] if after else upper
+                if span_start <= child_start and span_end >= child_end:
+                    ranges = [{"start": span_start, "end": span_end}]
+                    kind = "text_context"
+        if ranges is None:
+            excerpt = child
+            span = dict(kind=kind, coordinate="child", ranges=None, child_start=None,
+                        child_end=None, length=len(child), max_chars=REFERENCE_MAX_CHARS)
+        else:
+            excerpt = "".join(parent[r["start"]:r["end"]] for r in ranges)
+            if not excerpt or len(excerpt) > REFERENCE_MAX_CHARS:
+                raise ValueError("host reference exceeds bound")
+            span = dict(kind=kind, coordinate="parent", ranges=ranges,
+                        child_start=child_start, child_end=child_end,
+                        length=len(excerpt), max_chars=REFERENCE_MAX_CHARS)
+        result = {"evidence_id": evidence_id,
+                  **{key: row[key] for key in PROVENANCE_KEYS}}
+        result.update(excerpt=excerpt, span=span,
+                      excerpt_sha256=hashlib.sha256(excerpt.encode("utf-8")).hexdigest(),
+                      context_chars=max(0, len(excerpt) - len(child)))
+        return result
