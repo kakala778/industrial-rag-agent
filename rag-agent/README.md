@@ -6,7 +6,7 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 0.2 evidence selection compared
+## Current Stage — Agent 0.3 bounded evidence references
 
 The final pre-Agent RAG experiment is complete and frozen. Parent-context
 reranking remains offline. Agent 0 implements multi-document scoped search,
@@ -32,7 +32,22 @@ See [Agent 0.2 results and costs](docs/agent0-2-evidence-selection-model-compari
 `DEEPSEEK_API_KEY` from the environment; task/evidence excerpts leave the machine.
 The default remains deterministic and local Qwen stays available. The controlled
 runner in the report enforces this experiment's cost cap; ordinary CLI usage is
-separate from that frozen comparison. ID-only rendering is an offline prototype.
+separate from that frozen comparison.
+
+Agent 0.3 adds `--policy deepseek-reference`: DeepSeek selects evidence IDs and
+the host validates them and renders bounded excerpts/provenance from the active
+parsed cache. On five candidate-available tasks, ID selection remains 5/5 and
+fully relevant task success is 5/5 versus 4/5 under Agent 0.2's copied-quote
+contract. Citations were host-authentic for 11/11 selected IDs, including two
+retrieval-bound references reported separately. This remains experimental;
+the relevance oracle is **not independently human-verified**. The local review
+sheet and experiment results are ignored artifacts. See the
+[Agent 0.3 report](docs/agent0-3-bounded-evidence-contract.md) and the current
+[Agent benchmark review status](docs/agent-benchmark-review-status.md). The
+post-run AI-assisted PDF audit repaired provisional expected evidence IDs and
+conditions; offline rescoring preserved the 5/5 candidate-available ID and
+fully relevant Agent 0.3 results. The benchmark is ready for a semantic Agent
+experiment with provisional GT, not for industrial use.
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
 

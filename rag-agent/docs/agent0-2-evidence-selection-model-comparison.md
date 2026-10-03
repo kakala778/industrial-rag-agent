@@ -211,6 +211,48 @@ Only one formal A/B pass was run on this small existing-corpus set. There is no
 statistical significance claim or independent human review. The missing-candidate
 subset remains separately visible; model choice alone does not solve it.
 
+## Post-run AI-assisted GT audit and offline rescore
+
+On 2026-10-03, an AI-assisted review against the original PDFs found expected-ID
+contamination and a negation error in the provisional oracle. The source manifest,
+candidate reviews, saved Agent 0.2 actions, frozen SEARCH observations and raw
+results were preserved. A derived repair manifest and repaired copies were used
+to rescore the saved actions offline; no model, retrieval, embedding or parser
+was run. The original PDF review status remains `pending_human_pdf_review` in
+the source artifacts; the derived oracle is labeled `ai_pdf_reviewed`, not
+independently human-verified.
+
+The repaired metric values match the pre-audit headline values above:
+
+| DeepSeek metric | Before repair | After repair |
+|---|---:|---:|
+| Candidate-available / retrieval-bound tasks | 5 / 2 | 5 / 2 |
+| Candidate-available ID selection | 5/5 tasks; 9/9 IDs | 5/5 tasks; 9/9 IDs |
+| Fully relevant copied-quote success | 4/5 | 4/5 |
+| Field / unit / condition alignment | 9/9 · 7/7 · 6/7 | 9/9 · 7/7 · 6/7 |
+| Unsupported-side correctness | 1/1 | 1/1 |
+
+R02 and R04 remain `RETRIEVAL_BOUND`: their newly recorded target IDs exist in
+the reviewed source, but were absent from frozen Top3 observations. Qwen's
+candidate-available values also remain unchanged: ID selection 1/5, fully
+relevant success 0/5, field 6/10, unit 5/7, condition 2/7 and unsupported-side
+correctness 0/1.
+
+The audit removed four invalid expected-ID occurrences and one partial or
+redundant occurrence, added three expected-ID occurrences (including the
+second relevant R07/B figure), corrected one negated condition, and made two
+narrow condition-precision updates. Six candidate labels were reclassified.
+R05/B remains a medium-confidence, document-specific provisional unsupported
+side. The current GT schema does not encode comparison operators or normative
+modality such as `宜`; these are recorded as schema limits, not guessed into
+condition groups. The full audit and readiness decision are in
+[`agent-benchmark-review-status.md`](agent-benchmark-review-status.md).
+
+The derived rescore was run twice and produced identical output bytes. The
+runner confirms protected input hashes before and after scoring and records
+`inference_performed=false`, `retrieval_performed=false`; all derived local
+artifacts remain ignored by Git.
+
 ## Reproduction
 
 From `rag-agent/`, with the matching private files and environment variable:

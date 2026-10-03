@@ -3,7 +3,7 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 0.2 evidence selection compared
+## Current status — Agent 0.3 bounded evidence references
 
 M6–M10.1 cover structured PDF processing, failure analysis, controlled visual
 experiments, optional Hybrid retrieval and bounded parent-context reranking.
@@ -29,6 +29,16 @@ retrieval-bound. Flash is an opt-in experimental selector; source-condition
 omission and citation-contract limits remain. See the
 [Agent 0.2 protocol, cost and results](rag-agent/docs/agent0-2-evidence-selection-model-comparison.md).
 
+Agent 0.3 adds an opt-in evidence-ID contract: the host validates selected IDs
+and renders bounded citations from its active parsed-document registry. On the
+same five candidate-available tasks, DeepSeek retains 5/5 ID-selection success;
+fully relevant task success rises to 5/5, and applicable condition alignment
+to 7/7. Two tasks remain retrieval-bound. Citations are authentic to the current
+parsed cache, while relevance labels remain assistant-reviewed and
+**not independently human-verified**. Keep this contract experimental and
+confirm the local review sheet before semantic comparison. See the
+[Agent 0.3 protocol, results and limits](rag-agent/docs/agent0-3-bounded-evidence-contract.md).
+
 Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 `v0.5-local-rag-generation` remains the historical M1–M5 checkpoint.
 
@@ -41,7 +51,7 @@ Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 | Retrieval | Dense default; fixed BM25 + RRF Hybrid optional in PDF CLI |
 | BGE reranking | Optional Dense/Hybrid Top20 → Top3; off by default |
 | Visual enrichment / parent context | Offline experiments; not adopted in application |
-| Agent | Deterministic default; optional local Qwen or paid DeepSeek Flash selector |
+| Agent | Deterministic default; optional local Qwen, DeepSeek copied-quote selector, or experimental host-reference selector |
 | Vector database / Web API / durable execution | Not implemented |
 
 Dense cosine, RRF and BGE scores have different meanings and scales. Hybrid
@@ -110,6 +120,9 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | M10 | [Architecture review](rag-agent/docs/m10-architecture-review-and-agent-readiness.md), [parent experiment](rag-agent/docs/m10-parent-context-controlled-experiment.md) |
 | Pre-Agent | [Historical handoff and acceptance boundary](rag-agent/docs/agent-handoff.md) |
 | Agent 0 | [Design](rag-agent/docs/agent0-minimal-harness-design.md), [results and usage](rag-agent/docs/agent0-results.md) |
+| Agent 0.1 | [Progress, coverage and evidence relevance](rag-agent/docs/agent0-1-progress-coverage-results.md) |
+| Agent 0.2 | [Evidence selection and DeepSeek comparison](rag-agent/docs/agent0-2-evidence-selection-model-comparison.md) |
+| Agent 0.3 | [Bounded evidence reference contract](rag-agent/docs/agent0-3-bounded-evidence-contract.md) |
 
 ## Verification and private data
 
