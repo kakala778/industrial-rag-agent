@@ -6,7 +6,7 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 0.1 progress/coverage evaluated
+## Current Stage — Agent 0.2 evidence selection compared
 
 The final pre-Agent RAG experiment is complete and frozen. Parent-context
 reranking remains offline. Agent 0 implements multi-document scoped search,
@@ -23,6 +23,16 @@ observations, Qwen lookup coverage improves 57.1%→100% and repeats 44→0, but
 fully relevant success remains 0/7. Full milestone acceptance is unmet; quote
 fidelity and applicability remain experimental. See
 [Agent 0.1 results, protocol and limits](docs/agent0-1-progress-coverage-results.md).
+
+Agent 0.2 keeps the harness/RAG fixed and compares Qwen with optional DeepSeek
+Flash. On five candidate-available tasks, final ID selection is 1/5 vs 5/5 and
+fully relevant copied-quote success 0/5 vs 4/5; two tasks remain retrieval-bound.
+See [Agent 0.2 results and costs](docs/agent0-2-evidence-selection-model-comparison.md).
+`--policy deepseek` opts into the official paid API and reads only
+`DEEPSEEK_API_KEY` from the environment; task/evidence excerpts leave the machine.
+The default remains deterministic and local Qwen stays available. The controlled
+runner in the report enforces this experiment's cost cap; ordinary CLI usage is
+separate from that frozen comparison. ID-only rendering is an offline prototype.
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
 

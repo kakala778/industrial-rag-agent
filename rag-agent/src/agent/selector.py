@@ -69,23 +69,54 @@ def action_schema_for_state(state):
     return {"oneOf": choices}
 
 
+def selector_messages(state):
+    """Shared semantic prompt, public state and eligible schema for providers."""
+    view = asdict(state)
+    view.pop("trace")
+    view.pop("answer")
+    return [{"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(
+                {"state": view, "action_schema": action_schema_for_state(state)}, ensure_ascii=False)}]
+
+
+def parse_selector_action(content, state):
+    """Check decoder-independent eligibility; quote grounding remains in host."""
+    action = validate_action(content)
+    schema = next((r for r in action_schema_for_state(state)["oneOf"]
+                   if r["properties"]["action"]["const"] == action["action"]), None)
+    if schema is None:
+        raise InvalidAction("ineligible action")
+    props = schema["properties"]
+    if action["action"] == "SEARCH":
+        if action["query"] != props["query"]["const"] or action["scopes"][0] not in props["scopes"]["items"]["enum"]:
+            raise InvalidAction("ineligible search")
+    elif action["action"] == "LOOKUP":
+        if action["evidence_id"] not in props["evidence_id"]["enum"]:
+            raise InvalidAction("ineligible lookup")
+    elif action["action"] == "FINISH":
+        if not state.looked_up_evidence and action["findings"]:
+            raise InvalidAction("unobserved finding")
+        for f in action["findings"]:
+            if f["evidence_id"] not in state.looked_up_evidence or f["scope"] not in state.resolved_scopes:
+                raise InvalidAction("ineligible finding")
+    return action
+
+
 class OllamaActionSelector:
     def __init__(self, *, model="qwen3:4b", timeout=120,
-                 url="http://localhost:11434/api/chat"):
+                 url="http://localhost:11434/api/chat", max_tokens=1536):
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("selector timeout must be finite and positive")
         self.model, self.timeout, self.url = model, timeout, url
+        if type(max_tokens) is not int or not 1 <= max_tokens <= 1536:
+            raise ValueError("invalid output token limit")
+        self.max_tokens = max_tokens
 
     def __call__(self, state):
-        view = asdict(state)
-        # Trace is execution metadata; prior raw model messages/reasoning are absent.
-        view.pop("trace")
-        view.pop("answer")
         payload = {"model": self.model, "stream": False, "think": False,
                    "format": action_schema_for_state(state),
-                   "options": {"temperature": 0, "num_predict": 1536, "num_ctx": 16384},
-                   "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                                {"role": "user", "content": json.dumps(view, ensure_ascii=False)}]}
+                   "options": {"temperature": 0, "num_predict": self.max_tokens, "num_ctx": 16384},
+                   "messages": selector_messages(state)}
         request = Request(self.url, data=json.dumps(payload).encode("utf-8"),
                           headers={"Content-Type": "application/json"}, method="POST")
         try:
@@ -98,7 +129,7 @@ class OllamaActionSelector:
             if not isinstance(content, str):
                 raise InvalidAction("missing action content")
             # Ignore and never retain message.thinking, even if a server returns it.
-            return validate_action(content)
+            return parse_selector_action(content, state)
         except URLError as exc:
             if isinstance(exc.reason, TimeoutError):
                 raise TimeoutError("action selector timeout") from None

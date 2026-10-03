@@ -3,7 +3,7 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 0.1 progress/coverage evaluated
+## Current status — Agent 0.2 evidence selection compared
 
 M6–M10.1 cover structured PDF processing, failure analysis, controlled visual
 experiments, optional Hybrid retrieval and bounded parent-context reranking.
@@ -22,6 +22,13 @@ but fully relevant task success stays 0/7. Full milestone acceptance is unmet;
 quotes and applicability still fail. See the
 [Agent 0.1 results and limits](rag-agent/docs/agent0-1-progress-coverage-results.md).
 
+Agent 0.2 compares local Qwen with optional DeepSeek Flash on the same frozen
+observations. On five candidate-available tasks, final ID selection improves
+1/5→5/5 and fully relevant copied-quote success 0/5→4/5. Two other tasks remain
+retrieval-bound. Flash is an opt-in experimental selector; source-condition
+omission and citation-contract limits remain. See the
+[Agent 0.2 protocol, cost and results](rag-agent/docs/agent0-2-evidence-selection-model-comparison.md).
+
 Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 `v0.5-local-rag-generation` remains the historical M1–M5 checkpoint.
 
@@ -34,7 +41,7 @@ Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 | Retrieval | Dense default; fixed BM25 + RRF Hybrid optional in PDF CLI |
 | BGE reranking | Optional Dense/Hybrid Top20 → Top3; off by default |
 | Visual enrichment / parent context | Offline experiments; not adopted in application |
-| Agent 0 | Deterministic evidence harness; optional experimental Qwen action selector |
+| Agent | Deterministic default; optional local Qwen or paid DeepSeek Flash selector |
 | Vector database / Web API / durable execution | Not implemented |
 
 Dense cosine, RRF and BGE scores have different meanings and scales. Hybrid
