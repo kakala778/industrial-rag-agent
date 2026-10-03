@@ -3,13 +3,17 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — M10.1 completed
+## Current status — Agent 0 harness implemented
 
 M6–M10.1 cover structured PDF processing, failure analysis, controlled visual
 experiments, optional Hybrid retrieval and bounded parent-context reranking.
-**The next stage is a minimal Document Research Agent. Agent is not implemented.**
-See the [Agent handoff](rag-agent/docs/agent-handoff.md) for scope, missing
-contracts and acceptance criteria.
+The RAG experiments are frozen. Agent 0 adds a local multi-document session,
+scoped search/lookup tools, explicit state, strict actions and bounded execution.
+It compares cited excerpts; engineering semantic equivalence is not established.
+See the [design](rag-agent/docs/agent0-minimal-harness-design.md) and
+[results and usage](rag-agent/docs/agent0-results.md). Qwen action selection is
+experimental: synthetic tasks completed, but the real industrial smoke repeated
+one evidence lookup and ended in clarification without covering both sources.
 
 Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 `v0.5-local-rag-generation` remains the historical M1–M5 checkpoint.
@@ -23,7 +27,8 @@ Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 | Retrieval | Dense default; fixed BM25 + RRF Hybrid optional in PDF CLI |
 | BGE reranking | Optional Dense/Hybrid Top20 → Top3; off by default |
 | Visual enrichment / parent context | Offline experiments; not adopted in application |
-| Agent / vector database / Web API | Not implemented |
+| Agent 0 | Deterministic evidence harness; optional experimental Qwen action selector |
+| Vector database / Web API / durable execution | Not implemented |
 
 Dense cosine, RRF and BGE scores have different meanings and scales. Hybrid
 ranking diagnostics are not displayed as ordinary citations.
@@ -89,7 +94,8 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | M8.5–M8.6 | [Focused OCR](rag-agent/docs/m8-focused-ocr-comparison.md), [gated retrieval A/B](rag-agent/docs/m8-gated-vision-retrieval-ab.md) |
 | M9.1–M9.3 | [Hybrid experiment](rag-agent/docs/m9-hybrid-retrieval-experiment.md), [independent validation](rag-agent/docs/m9-independent-validation-and-ranking-audit.md), [optional integration](rag-agent/docs/m9-optional-hybrid-integration.md) |
 | M10 | [Architecture review](rag-agent/docs/m10-architecture-review-and-agent-readiness.md), [parent experiment](rag-agent/docs/m10-parent-context-controlled-experiment.md) |
-| Next | [Agent handoff and acceptance boundary](rag-agent/docs/agent-handoff.md) |
+| Pre-Agent | [Historical handoff and acceptance boundary](rag-agent/docs/agent-handoff.md) |
+| Agent 0 | [Design](rag-agent/docs/agent0-minimal-harness-design.md), [results and usage](rag-agent/docs/agent0-results.md) |
 
 ## Verification and private data
 
@@ -101,8 +107,9 @@ python -m unittest discover -s tests
 git diff --check
 ```
 
-The M10.1 report records 143 passing tests at its checkpoint. Documentation
-updates do not constitute a new model evaluation or generated-answer benchmark.
+The M10.1 report records 143 tests at its checkpoint. Agent 0 verification ran
+180 tests (37 new), plus a frozen 10-case synthetic benchmark and separate local
+industrial smoke. These results do not establish industrial semantic accuracy.
 
 Do not commit industrial PDFs, private QA, page/crop images, raw model answers,
 MinerU caches, models, credentials or local experiment outputs. Reproducing the

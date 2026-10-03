@@ -6,12 +6,15 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — M10.1 complete; Agent next
+## Current Stage — Agent 0 minimal harness
 
-**ENTER AGENT.** The final pre-Agent RAG experiment is complete. Parent-context
-reranking remains offline and is not adopted in the application. Agent itself
-is not implemented; the next work is a bounded Document Research workflow with
-search, original-evidence lookup, task state and grounding checks. See the
+The final pre-Agent RAG experiment is complete and frozen. Parent-context
+reranking remains offline. Agent 0 implements multi-document scoped search,
+bounded original-evidence lookup, task state, strict JSON actions, budgets and
+citation validation without an Agent framework. The default policy is
+deterministic; Qwen selection is experimental and failed to cover both sources
+in the real industrial smoke. See [Agent 0 results and usage](docs/agent0-results.md),
+[design](docs/agent0-minimal-harness-design.md), the historical
 [Agent handoff](docs/agent-handoff.md) and [M10.1 results](docs/m10-parent-context-controlled-experiment.md).
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
@@ -66,6 +69,8 @@ Answer
 - Markdown and PDF retrieval evaluation datasets and scripts
 - Local LLM generation through Ollama with `qwen3:4b`
 - Retrieved-source citations in the RAG CLI
+- Agent 0 scoped evidence investigation with SEARCH / LOOKUP / CLARIFY / FINISH,
+  deterministic execution and optional locally validated Qwen JSON selection
 
 ## Quick Start
 
@@ -132,7 +137,7 @@ This baseline does not include:
 - Document version management
 - Multi-tenant support
 - Monitoring
-- Agent workflow
+- Durable Agent execution/resume and automated engineering semantic comparison
 - Memory
 - Web API
 

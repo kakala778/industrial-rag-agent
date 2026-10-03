@@ -1,0 +1,16 @@
+{
+  "version": "agent0-synthetic-v1",
+  "query": "Compare rated pressure in A and B.",
+  "cases": [
+    {"id": "normal", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": ["A", "B"], "status": "finished", "covered": ["A", "B"], "comparison": "same_text"},
+    {"id": "missing_side", "a": "Rated pressure: 10 MPa.", "b": "", "scopes": ["A", "B"], "status": "incomplete", "covered": ["A"], "comparison": "insufficient_evidence"},
+    {"id": "conflicting", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 12 MPa.", "scopes": ["A", "B"], "status": "finished", "covered": ["A", "B"], "comparison": "different_text"},
+    {"id": "missing_scope", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": [], "status": "clarify", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "invalid_scope", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": ["A", "UNKNOWN"], "status": "invalid_scope", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "invalid_id", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": ["A", "B"], "injection": "invalid_id", "status": "invalid_action", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "empty_search", "a": "", "b": "", "scopes": ["A", "B"], "status": "incomplete", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "tool_error", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": ["A", "B"], "injection": "tool_error", "status": "tool_error", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "budget", "a": "Rated pressure: 10 MPa.", "b": "Rated pressure: 10 MPa.", "scopes": ["A", "B"], "max_steps": 1, "status": "budget_exceeded", "covered": [], "comparison": "insufficient_evidence"},
+    {"id": "simple_finish", "a": "Rated pressure: 8 MPa.", "b": "Rated pressure: 8 MPa.", "scopes": ["A", "B"], "status": "finished", "covered": ["A", "B"], "comparison": "same_text"}
+  ]
+}
