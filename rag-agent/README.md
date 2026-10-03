@@ -6,15 +6,63 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 1.3 ROI review
+## Current Stage — M11 complete; M12 scope pending
+
+M11 is a bounded, local-first industrial-document research demo. Supply one
+task and two to four explicit document aliases; the Agent searches only those
+documents, looks up observed evidence IDs, and ends with a Markdown report or
+a terminal clarification. The report contains only current-session
+host-rendered evidence and neutral per-scope status. A citation identifies
+where text came from; it does not prove relevance, correctness, applicability,
+equivalence or compliance. FINISH accepts no generated engineering conclusion.
+
+The default selector is local Qwen using the evidence-reference contract.
+`--policy deterministic` supports offline mechanics/smoke checks and makes no
+relevance assessment. `--policy deepseek-reference` is opt-in, requires
+`DEEPSEEK_API_KEY`, and prints a disclosure before sending task/evidence text to
+the provider. Reports are UTF-8 files under ignored `outputs/agent11/`; they
+contain no input paths, trace, prompt, raw provider response or credentials.
+The legacy `--query/--scopes` interface remains separate for Agent 0's
+two-scope compatibility workflow.
+
+Run from the `rag-agent/` directory:
+
+```powershell
+python -m src.agent_demo --task "查询设备额定压力" `
+  --document A=design.pdf `
+  --document B=manual.pdf `
+  --document C=standard.pdf
+```
+
+Scope statuses are deliberately limited: `evidence_found` means source IDs
+were selected for display; `no_evidence_found` means the configured search
+returned no candidates; `insufficient_scope` means candidates were returned
+and at least one was looked up, but no ID was selected. Neither search absence
+nor Agent selection establishes document-level absence or semantic
+correctness. Clarification ends the current run; rerun with the missing task
+constraint.
+
+RAG defaults and retrieval parameters remain frozen. Agent 1 semantic
+comparison remains evaluation-only and is not used in this demo. See the
+[M11 design](docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md),
+[implementation plan](docs/superpowers/plans/2026-10-03-m11-evidence-research-agent.md)
+and [Agent handoff](docs/agent-handoff.md).
+
+M11 verification passed 345 tests and a synthetic three-document CLI smoke.
+The smoke verifies mechanics and report privacy, not live-model selection
+quality or industrial-PDF relevance. M12 has not started or received an
+approved scope; the recommended kickoff is a human-reviewed demo-readiness
+pilot. See the M12 handoff notes before selecting its target.
+
+## Previous Decision — Agent 1.3 ROI review
 
 Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 accepted 15/17
 outputs and achieved 14/17 strict verdict accuracy, but accepted unit and
 condition/applicability accuracy remain 8/15 and 7/15. The semantic comparator
-is not ready to support engineering decisions and remains evaluation-only. The
-next recommended milestone is an end-to-end demo centered on scoped evidence,
-host-rendered references, and honest incomplete results; any semantic verdict
-must remain clearly experimental. See the
+is not ready to support engineering decisions and remains evaluation-only. At
+that decision point, the next recommended milestone was an end-to-end demo
+centered on scoped evidence, host-rendered references, and honest incomplete
+results; any semantic verdict must remain clearly experimental. See the
 [Agent 1.3 ROI review](docs/agent1-3-semantic-comparator-roi-review.md) and
 [Agent 1.2 results](docs/agent1-2-structured-output-validation.md).
 

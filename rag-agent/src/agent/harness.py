@@ -40,9 +40,15 @@ class AgentHarness:
         if not isinstance(clarification_required, str) or len(clarification_required) > 500:
             raise ValueError("clarification requirement must be a bounded string")
         state.clarification_required = clarification_required.strip()
-        if (len(requested) != 2 or any(not isinstance(s, str) for s in requested)
-                or len(set(requested)) != 2):
-            state.pending_clarification = "请明确指定两份不同的文档别名。"
+        min_scopes, max_scopes = ((2, 4) if self.action_contract == "evidence_reference"
+                                  else (2, 2))
+        if (not min_scopes <= len(requested) <= max_scopes
+                or any(not isinstance(s, str) for s in requested)
+                or len(set(requested)) != len(requested)):
+            state.pending_clarification = (
+                "请明确指定两到四份不同的文档别名。"
+                if self.action_contract == "evidence_reference"
+                else "请明确指定两份不同的文档别名。")
             state.status, state.answer = "clarify", state.pending_clarification
             self._trace(state, "CLARIFY", {"question": state.answer}, "ok", "scope required")
             return state
@@ -142,7 +148,8 @@ class AgentHarness:
             if not repeated_action(state, action) and action["evidence_id"] not in eligible_lookup_ids(state):
                 raise InvalidAction("uncovered candidate scope must be looked up first")
         elif kind == "CLARIFY":
-            if not state.clarification_required:
+            if (self.action_contract == "copied_quote"
+                    and not state.clarification_required):
                 raise InvalidAction("no missing user constraint; continue investigation or finish")
         elif kind == "FINISH":
             if not finish_ready(state):
@@ -165,16 +172,23 @@ class AgentHarness:
                 candidates = {scope: [r for h in state.search_history
                                       if h["scopes"][0] == scope and h.get("status") == "ok"
                                       for r in h["results"]] for scope in state.resolved_scopes}
+                looked_up = {scope: [eid for eid, row in state.looked_up_evidence.items()
+                                     if row.get("source") == scope]
+                             for scope in state.resolved_scopes}
                 for outcome in action["outcomes"]:
                     scope, status = outcome["scope"], outcome["status"]
-                    if status == "no_candidates" and candidates[scope]:
-                        raise InvalidAction("no_candidates contradicts observed candidates")
-                    if status == "insufficient_evidence" and not candidates[scope]:
-                        raise InvalidAction("insufficient_evidence requires observed candidates")
-                    if status == "supported":
+                    candidate_ids = {row["evidence_id"] for row in candidates[scope]}
+                    if status == "no_evidence_found" and candidates[scope]:
+                        raise InvalidAction("no_evidence_found contradicts observed candidates")
+                    if status == "insufficient_scope" and (
+                            not candidates[scope]
+                            or not candidate_ids.intersection(looked_up[scope])):
+                        raise InvalidAction("insufficient_scope requires a looked-up candidate")
+                    if status == "evidence_found":
                         for evidence_id in outcome["evidence_ids"]:
                             evidence = state.looked_up_evidence.get(evidence_id)
-                            if (evidence_id in seen or evidence_id not in state.evidence_ids
+                            if (evidence_id in seen or evidence_id not in candidate_ids
+                                    or evidence_id not in state.evidence_ids
                                     or evidence is None or evidence.get("source") != scope
                                     or not self._owns_session_evidence(evidence_id)):
                                 raise InvalidAction("evidence reference is not active, observed, looked up and in scope")
@@ -274,8 +288,7 @@ class AgentHarness:
         findings = []
         for outcome in outcomes:
             row = {"scope": outcome["scope"], "status": outcome["status"]}
-            if outcome["status"] == "supported":
-                row["claim"] = outcome["claim"]
+            if outcome["status"] == "evidence_found":
                 row["evidence"] = [self._render_reference(evidence_id)
                                    for evidence_id in outcome["evidence_ids"]]
             findings.append(row)

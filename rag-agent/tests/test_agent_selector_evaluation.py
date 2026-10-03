@@ -28,6 +28,25 @@ class AgentSelectorEvaluationTests(unittest.TestCase):
         self.assertIn("oneOf", received["format"])
         self.assertNotIn("never store me", json.dumps(action))
 
+    def test_ollama_reference_contract_is_opt_in_and_uses_reference_clarify(self):
+        from src.agent.selector import OllamaActionSelector
+        from src.agent.state import AgentState
+        response = {"message": {"content": json.dumps({"action": "CLARIFY",
+                                                          "question": "Which operating condition?"})}}
+        received = []
+        def transport(request, timeout):
+            received.append(json.loads(request.data))
+            return io.BytesIO(json.dumps(response).encode())
+
+        with patch("src.agent.selector.urlopen", side_effect=transport):
+            action = OllamaActionSelector(action_contract="evidence_reference")(AgentState("p", ["A", "B"], ["A", "B"]))
+        self.assertEqual(action["action"], "CLARIFY")
+        self.assertIn("CLARIFY", json.dumps(received[0]["format"]))
+        self.assertNotIn("FINISH", json.dumps(received[0]["format"]))
+        self.assertIn("citation", received[0]["messages"][0]["content"].lower())
+        default = OllamaActionSelector()
+        self.assertEqual(default.action_contract, "copied_quote")
+
     def test_selector_rejects_invalid_output_and_propagates_timeout(self):
         from src.agent.actions import InvalidAction
         from src.agent.selector import OllamaActionSelector

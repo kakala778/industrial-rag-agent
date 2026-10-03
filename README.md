@@ -3,15 +3,49 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 1.3 ROI review
+## Current status — M11 complete; M12 scope pending
+
+M11 provides a local-first research demo for two to four explicitly named
+documents. It runs bounded SEARCH / LOOKUP / CLARIFY / FINISH actions and writes
+a private Markdown report with host-rendered evidence references and neutral
+scope statuses. Local Qwen is the default; deterministic mode is for offline
+mechanics checks, and the explicit DeepSeek reference mode discloses that task
+and selected evidence text leave the machine. The report makes no engineering
+or compliance verdict. See the
+[M11 design and implementation plan](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md)
+and [Agent handoff](rag-agent/docs/agent-handoff.md). The current implementation
+passed 345 unit tests and a synthetic three-document CLI smoke; live model
+quality and industrial-PDF evidence relevance were not evaluated in that smoke.
+
+M12 has not started and has no approved scope. The recommended kickoff is a
+small, human-reviewed demo-readiness pilot using explicitly selected documents
+and tasks. The existing architecture review's troubleshooting-agent candidate
+still depends on a reliable operating-data source and must not be treated as
+approved scope. See the M12 section in the handoff before choosing a target.
+
+Run from `rag-agent/`:
+
+```powershell
+python -m src.agent_demo --task "查询设备额定压力" `
+  --document A=design.pdf `
+  --document B=manual.pdf `
+  --document C=standard.pdf
+```
+
+The report is written under ignored `outputs/agent11/`. Citations identify
+source locations; they do not establish relevance, support, correctness,
+applicability or compliance. The older `--query/--scopes` invocation remains
+available for the two-scope Agent 0 compatibility path.
+
+## Previous decision — Agent 1.3 ROI review
 
 Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 accepted 15/17
 outputs and achieved 14/17 strict verdict accuracy, but accepted unit and
 condition/applicability accuracy remain 8/15 and 7/15. The comparator is not
-ready to support engineering decisions and remains evaluation-only. The next
-recommended milestone is an end-to-end demo centered on scoped evidence,
-host-rendered references, and honest incomplete results; any semantic verdict
-must remain clearly experimental. See the
+ready to support engineering decisions and remains evaluation-only. At that
+decision point, the next recommended milestone was an end-to-end demo centered
+on scoped evidence, host-rendered references, and honest incomplete results;
+any semantic verdict must remain clearly experimental. See the
 [Agent 1.3 ROI review](rag-agent/docs/agent1-3-semantic-comparator-roi-review.md)
 and [Agent 1.2 results](rag-agent/docs/agent1-2-structured-output-validation.md).
 
@@ -77,7 +111,7 @@ Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 | Retrieval | Dense default; fixed BM25 + RRF Hybrid optional in PDF CLI |
 | BGE reranking | Optional Dense/Hybrid Top20 → Top3; off by default |
 | Visual enrichment / parent context | Offline experiments; not adopted in application |
-| Agent | Deterministic default; optional local Qwen, DeepSeek copied-quote selector, or experimental host-reference selector |
+| Agent | M11 evidence research demo; local Qwen default, deterministic offline mode, explicit remote DeepSeek reference mode |
 | Vector database / Web API / durable execution | Not implemented |
 
 Dense cosine, RRF and BGE scores have different meanings and scales. Hybrid
@@ -150,6 +184,8 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | Agent 0.2 | [Evidence selection and DeepSeek comparison](rag-agent/docs/agent0-2-evidence-selection-model-comparison.md) |
 | Agent 0.3 | [Bounded evidence reference contract](rag-agent/docs/agent0-3-bounded-evidence-contract.md) |
 | Agent 1.2–1.3 | [Structured output validation](rag-agent/docs/agent1-2-structured-output-validation.md), [semantic comparator ROI review](rag-agent/docs/agent1-3-semantic-comparator-roi-review.md) |
+| M11 | [Evidence Research Agent design and implementation plan](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md), [Agent handoff](rag-agent/docs/agent-handoff.md) |
+| M12 | Kickoff scope pending; see the [Agent handoff](rag-agent/docs/agent-handoff.md) for the current proposal and constraints |
 
 ## Verification and private data
 

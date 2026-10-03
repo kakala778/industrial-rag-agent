@@ -103,9 +103,9 @@ class DeepSeekSelectorTests(unittest.TestCase):
         state.looked_up_evidence = {"ev_a": {"source": "A"}, "ev_b": {"source": "B"}}
         state.remaining_budget = {"steps": 1, "search": 2, "lookup": 4}
         action = {"action": "FINISH", "outcomes": [
-            {"scope": "A", "status": "supported", "claim": "supports rating",
+            {"scope": "A", "status": "evidence_found",
              "evidence_ids": ["ev_a"]},
-            {"scope": "B", "status": "insufficient_evidence"},
+            {"scope": "B", "status": "insufficient_scope"},
         ]}
         payloads = []
         def transport(request, timeout):
@@ -117,9 +117,121 @@ class DeepSeekSelectorTests(unittest.TestCase):
             selector = DeepSeekActionSelector(action_contract="evidence_reference")
             self.assertEqual(selector(state), action)
         prompt = payloads[0]["messages"][0]["content"]
+        normalized_prompt = " ".join(prompt.split())
         schema = json.loads(payloads[0]["messages"][1]["content"])["action_schema"]
-        self.assertIn("Never provide source quotes", prompt)
+        self.assertIn("no_evidence_found", prompt)
+        self.assertIn("insufficient_scope", prompt)
+        self.assertIn("evidence_found", prompt)
+        self.assertIn("citation", prompt.lower())
+        self.assertIn("does not establish relevance", normalized_prompt)
+        self.assertIn("terminal CLARIFY", normalized_prompt)
+        self.assertIn("engineering verdict", prompt)
+        self.assertNotIn("claim", action["outcomes"][0])
         finish = next(row for row in schema["oneOf"]
                       if row["properties"]["action"]["const"] == "FINISH")
         self.assertIn("outcomes", finish["properties"])
         self.assertNotIn("findings", finish["properties"])
+        outcomes = finish["properties"]["outcomes"]["items"]["oneOf"]
+        self.assertEqual({row["properties"]["scope"]["const"] for row in outcomes}, {"A", "B"})
+
+    def test_reference_schema_is_dynamic_and_statuses_follow_host_coverage(self):
+        from src.agent.selector import action_schema_for_state
+        from src.agent.state import AgentState
+
+        for scopes in (["A", "B"], ["A", "B", "C"], ["A", "B", "C", "D"]):
+            state = AgentState("pressure", list(scopes), list(scopes))
+            state.search_history = [
+                {"scopes": ["A"], "query": "pressure", "status": "ok",
+                 "results": [{"evidence_id": "ev_a", "source": "A"}]},
+                {"scopes": ["B"], "query": "pressure", "status": "no_evidence", "results": []},
+                *([{"scopes": [scope], "query": "pressure", "status": "ok",
+                    "results": [{"evidence_id": f"ev_{scope.lower()}", "source": scope}]} for scope in scopes[2:]])
+            ]
+            state.evidence_ids = ["ev_a", *(f"ev_{scope.lower()}" for scope in scopes[2:])]
+            state.looked_up_evidence = {eid: {"source": source}
+                                        for source, eid in [("A", "ev_a"),
+                                                            *((scope, f"ev_{scope.lower()}") for scope in scopes[2:])]}
+            schema = action_schema_for_state(state, contract="evidence_reference")
+            finish = next(row for row in schema["oneOf"]
+                          if row["properties"]["action"]["const"] == "FINISH")
+            self.assertEqual(finish["properties"]["outcomes"]["minItems"], len(scopes))
+            self.assertEqual(finish["properties"]["outcomes"]["maxItems"], len(scopes))
+            variants = finish["properties"]["outcomes"]["items"]["oneOf"]
+            aliases = {row["properties"]["scope"]["const"] for row in variants}
+            self.assertEqual(aliases, set(scopes))
+            statuses = {scope: set() for scope in scopes}
+            for row in variants:
+                statuses[row["properties"]["scope"]["const"]].add(
+                    row["properties"]["status"]["const"])
+            self.assertEqual(statuses["A"], {"evidence_found", "insufficient_scope"})
+            self.assertEqual(statuses["B"], {"no_evidence_found"})
+            for scope in scopes[2:]:
+                self.assertEqual(statuses[scope], {"evidence_found", "insufficient_scope"})
+            evidence_variant = next(row for row in variants
+                                    if row["properties"]["scope"]["const"] == "A"
+                                    and row["properties"]["status"]["const"] == "evidence_found")
+            self.assertEqual(evidence_variant["properties"]["evidence_ids"]["items"]["enum"], ["ev_a"])
+
+    def test_reference_finish_stays_hidden_until_candidate_scope_is_looked_up(self):
+        from src.agent.selector import action_schema_for_state
+        state = self.state()
+        state.search_history = [
+            {"scopes": ["A"], "query": "pressure", "status": "ok",
+             "results": [{"evidence_id": "ev_a", "source": "A"}]},
+            {"scopes": ["B"], "query": "pressure", "status": "no_evidence", "results": []},
+        ]
+        state.evidence_ids = ["ev_a"]
+        self.assertNotIn("FINISH", [row["properties"]["action"]["const"] for row in
+                                   action_schema_for_state(state, contract="evidence_reference")["oneOf"]])
+        state.looked_up_evidence["ev_a"] = {"source": "A"}
+        schema = action_schema_for_state(state, contract="evidence_reference")
+        finish = next(row for row in schema["oneOf"] if row["properties"]["action"]["const"] == "FINISH")
+        variants = finish["properties"]["outcomes"]["items"]["oneOf"]
+        status_by_scope = {}
+        for row in variants:
+            status_by_scope.setdefault(row["properties"]["scope"]["const"], set()).add(
+                row["properties"]["status"]["const"])
+        self.assertEqual(status_by_scope, {"A": {"evidence_found", "insufficient_scope"},
+                                           "B": {"no_evidence_found"}})
+
+    def test_reference_selector_rejects_status_contradicting_scope_candidates(self):
+        from src.agent.selector import parse_selector_action
+        state = self.state()
+        state.search_history = [
+            {"scopes": ["A"], "query": "pressure", "status": "ok",
+             "results": [{"evidence_id": "ev_a", "source": "A"}]},
+            {"scopes": ["B"], "query": "pressure", "status": "no_evidence", "results": []},
+        ]
+        state.evidence_ids = ["ev_a"]
+        state.looked_up_evidence = {"ev_a": {"source": "A"}}
+        invalid = {"action": "FINISH", "outcomes": [
+            {"scope": "A", "status": "no_evidence_found"},
+            {"scope": "B", "status": "no_evidence_found"},
+        ]}
+        with self.assertRaises(InvalidAction):
+            parse_selector_action(invalid, state, contract="evidence_reference")
+
+    def test_reference_clarify_is_selectable_but_copied_quote_gate_is_unchanged(self):
+        from src.agent.selector import action_schema_for_state
+        state = self.state()
+        copied = action_schema_for_state(state)
+        reference = action_schema_for_state(state, contract="evidence_reference")
+        self.assertNotIn("CLARIFY", [row["properties"]["action"]["const"] for row in copied["oneOf"]])
+        self.assertIn("CLARIFY", [row["properties"]["action"]["const"] for row in reference["oneOf"]])
+
+    def test_deterministic_reference_policy_searches_and_looks_up_each_candidate_scope(self):
+        from src.agent.policy import DeterministicReferencePolicy
+        state = self.state()
+        policy = DeterministicReferencePolicy()
+        self.assertEqual(policy(state), {"action": "SEARCH", "query": "pressure", "scopes": ["A"]})
+        state.search_history.append({"scopes": ["A"], "query": "pressure", "status": "ok",
+                                     "results": [{"evidence_id": "ev_a", "source": "A"}]})
+        state.evidence_ids = ["ev_a"]
+        self.assertEqual(policy(state), {"action": "SEARCH", "query": "pressure", "scopes": ["B"]})
+        state.search_history.append({"scopes": ["B"], "query": "pressure", "status": "no_evidence", "results": []})
+        self.assertEqual(policy(state), {"action": "LOOKUP", "evidence_id": "ev_a"})
+        state.looked_up_evidence["ev_a"] = {"source": "A", "text": "pressure value"}
+        self.assertEqual(policy(state), {"action": "FINISH", "outcomes": [
+            {"scope": "A", "status": "evidence_found", "evidence_ids": ["ev_a"]},
+            {"scope": "B", "status": "no_evidence_found"},
+        ]})

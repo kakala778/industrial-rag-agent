@@ -33,17 +33,18 @@ def _text(value, maximum):
 REFERENCE_OUTCOME_SCHEMA = {
     "oneOf": [
         {"type": "object", "properties": {
-            "scope": {"type": "string"}, "status": {"const": "supported"},
-            "claim": {"type": "string", "maxLength": 1000},
-            "evidence_ids": {"type": "array", "items": {"type": "string"},
+            "scope": {"type": "string"}, "status": {"const": "evidence_found"},
+            "evidence_ids": {"type": "array", "items": {"type": "string",
+                                                             "minLength": 1,
+                                                             "maxLength": 100},
                              "minItems": 1, "maxItems": 3}},
-         "required": ["scope", "status", "claim", "evidence_ids"],
+         "required": ["scope", "status", "evidence_ids"],
          "additionalProperties": False},
         {"type": "object", "properties": {
-            "scope": {"type": "string"}, "status": {"const": "insufficient_evidence"}},
+            "scope": {"type": "string"}, "status": {"const": "no_evidence_found"}},
          "required": ["scope", "status"], "additionalProperties": False},
         {"type": "object", "properties": {
-            "scope": {"type": "string"}, "status": {"const": "no_candidates"}},
+            "scope": {"type": "string"}, "status": {"const": "insufficient_scope"}},
          "required": ["scope", "status"], "additionalProperties": False},
     ]}
 
@@ -91,7 +92,7 @@ def validate_action(raw, *, contract="copied_quote"):
                     raise InvalidAction("invalid finding")
         else:
             outcomes = raw["outcomes"]
-            if not isinstance(outcomes, list) or len(outcomes) != 2:
+            if not isinstance(outcomes, list) or not 2 <= len(outcomes) <= 4:
                 raise InvalidAction("invalid scope outcomes")
             seen_scopes = set()
             for row in outcomes:
@@ -101,15 +102,15 @@ def validate_action(raw, *, contract="copied_quote"):
                     raise InvalidAction("duplicate scope outcome")
                 seen_scopes.add(row["scope"])
                 status = row.get("status")
-                if status == "supported":
+                if status == "evidence_found":
                     ids = row.get("evidence_ids")
-                    if (set(row) != {"scope", "status", "claim", "evidence_ids"}
-                            or not _text(row["claim"], 1000) or not isinstance(ids, list)
+                    if (set(row) != {"scope", "status", "evidence_ids"}
+                            or not isinstance(ids, list)
                             or not 1 <= len(ids) <= 3
                             or any(not _text(eid, 100) for eid in ids)
                             or len(set(ids)) != len(ids)):
-                        raise InvalidAction("invalid supported outcome")
-                elif status in ("insufficient_evidence", "no_candidates"):
+                        raise InvalidAction("invalid evidence_found outcome")
+                elif status in ("insufficient_scope", "no_evidence_found"):
                     if set(row) != {"scope", "status"}:
                         raise InvalidAction("unsupported outcome carries evidence")
                 else:
@@ -147,7 +148,7 @@ REFERENCE_ACTION_JSON_SCHEMA = {
         ACTION_JSON_SCHEMA["oneOf"][2],
         {"type": "object", "properties": {
             "action": {"const": "FINISH"},
-            "outcomes": {"type": "array", "minItems": 2, "maxItems": 2,
+            "outcomes": {"type": "array", "minItems": 2, "maxItems": 4,
                           "items": REFERENCE_OUTCOME_SCHEMA}},
          "required": ["action", "outcomes"], "additionalProperties": False},
     ]}

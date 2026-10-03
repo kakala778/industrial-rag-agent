@@ -1,93 +1,100 @@
-import json
 import unittest
 
-from src.agent.actions import InvalidAction
-from src.agent.selector import action_schema_for_state, parse_selector_action
-from src.agent.state import AgentState
+from src.agent.actions import (
+    ACTION_JSON_SCHEMA,
+    REFERENCE_ACTION_JSON_SCHEMA,
+    InvalidAction,
+    validate_action,
+)
 
 
-def ready_state():
-    state = AgentState("compare ratings", ["A", "B"])
-    state.resolved_scopes = ["A", "B"]
-    state.search_history = [
-        {"scopes": ["A"], "query": state.original_query, "status": "ok",
-         "results": [{"evidence_id": "ev_a", "source": "A"}]},
-        {"scopes": ["B"], "query": state.original_query, "status": "ok",
-         "results": [{"evidence_id": "ev_b", "source": "B"}]},
-    ]
-    state.evidence_ids = ["ev_a", "ev_b"]
-    state.looked_up_evidence = {
-        "ev_a": {"evidence_id": "ev_a", "source": "A", "text": "source A"},
-        "ev_b": {"evidence_id": "ev_b", "source": "B", "text": "source B"},
-    }
-    state.remaining_budget = {"steps": 1, "search": 2, "lookup": 4}
-    return state
+def no_evidence_outcome(scope):
+    return {"scope": scope, "status": "no_evidence_found"}
 
 
 class AgentReferenceActionTests(unittest.TestCase):
-    def test_supported_and_insufficient_evidence_outcomes_parse(self):
-        state = ready_state()
-        action = {"action": "FINISH", "outcomes": [
-            {"scope": "A", "status": "supported", "claim": "rated pressure is 10 MPa",
-             "evidence_ids": ["ev_a"]},
-            {"scope": "B", "status": "insufficient_evidence"},
-        ]}
-        self.assertEqual(parse_selector_action(json.dumps(action), state,
-                                               contract="evidence_reference"), action)
+    def test_reference_finish_accepts_two_three_and_four_unique_scope_outcomes(self):
+        for count in (2, 3, 4):
+            outcomes = [no_evidence_outcome(f"S{index}") for index in range(count)]
+            action = {"action": "FINISH", "outcomes": outcomes}
+            with self.subTest(count=count):
+                self.assertEqual(validate_action(action, contract="evidence_reference"), action)
 
-    def test_no_candidates_is_a_distinct_valid_scope_outcome(self):
-        state = ready_state()
-        state.search_history[1] = {"scopes": ["B"], "query": state.original_query,
-                                   "status": "no_evidence", "results": []}
-        state.evidence_ids = ["ev_a"]
-        state.looked_up_evidence.pop("ev_b")
-        action = {"action": "FINISH", "outcomes": [
-            {"scope": "A", "status": "supported", "claim": "present", "evidence_ids": ["ev_a"]},
-            {"scope": "B", "status": "no_candidates"},
-        ]}
-        self.assertEqual(parse_selector_action(json.dumps(action), state,
-                                               contract="evidence_reference"), action)
-
-    def test_reference_action_schema_never_requests_model_quotes(self):
-        state = ready_state()
-        schema = action_schema_for_state(state, contract="evidence_reference")
-        finish = next(row for row in schema["oneOf"]
-                      if row["properties"]["action"]["const"] == "FINISH")
-        outcome = finish["properties"]["outcomes"]["items"]["oneOf"]
-        supported = next(row for row in outcome
-                         if row["properties"]["status"]["const"] == "supported")
-        self.assertIn("evidence_ids", supported["properties"])
-        self.assertNotIn("quote", supported["properties"])
-
-    def test_reference_finishes_require_each_scope_exactly_once(self):
-        state = ready_state()
-        valid_a = {"scope": "A", "status": "supported", "claim": "claim", "evidence_ids": ["ev_a"]}
-        valid_b = {"scope": "B", "status": "supported", "claim": "claim", "evidence_ids": ["ev_b"]}
-        for outcomes in ([valid_a], [valid_a, valid_a],
-                         [valid_a, dict(valid_b, scope="C")]):
+    def test_reference_finish_requires_two_to_four_unique_scope_outcomes(self):
+        valid_a = no_evidence_outcome("A")
+        valid_b = no_evidence_outcome("B")
+        valid_c = no_evidence_outcome("C")
+        valid_d = no_evidence_outcome("D")
+        for outcomes in ([valid_a], [valid_a, valid_b, valid_c, valid_d,
+                                     no_evidence_outcome("E")],
+                         [valid_a, no_evidence_outcome("A")]):
             with self.subTest(outcomes=outcomes), self.assertRaises(InvalidAction):
-                parse_selector_action(json.dumps({"action": "FINISH", "outcomes": outcomes}),
-                                      state, contract="evidence_reference")
+                validate_action({"action": "FINISH", "outcomes": outcomes},
+                                contract="evidence_reference")
 
-    def test_unavailable_ids_and_unsupported_payloads_are_rejected(self):
-        state = ready_state()
-        invalid = [
-            {"scope": "A", "status": "supported", "claim": "claim", "evidence_ids": ["ev_forged"]},
-            {"scope": "A", "status": "insufficient_evidence", "evidence_ids": ["ev_a"]},
-            {"scope": "A", "status": "no_candidates", "claim": "claim"},
-            {"scope": "A", "status": "supported", "claim": "claim", "evidence_ids": ["ev_a"], "quote": "fake"},
-            {"scope": "A", "status": "supported", "claim": "claim", "evidence_ids": ["ev_b"]},
+    def test_evidence_found_requires_one_to_three_unique_nonempty_ids(self):
+        valid = {"scope": "A", "status": "evidence_found",
+                 "evidence_ids": ["ev_a", "ev_b", "ev_c"]}
+        self.assertEqual(validate_action({"action": "FINISH", "outcomes": [
+            valid, no_evidence_outcome("B")
+        ]}, contract="evidence_reference")["outcomes"][0], valid)
+        invalid_rows = [
+            {"scope": "A", "status": "evidence_found", "evidence_ids": []},
+            {"scope": "A", "status": "evidence_found", "evidence_ids": ["ev_a"] * 4},
+            {"scope": "A", "status": "evidence_found", "evidence_ids": ["ev_a", "ev_a"]},
+            {"scope": "A", "status": "evidence_found", "evidence_ids": [""]},
+            {"scope": "A", "status": "evidence_found", "evidence_ids": ["ev_a"],
+             "claim": "unsupported free-form conclusion"},
         ]
-        for bad in invalid:
-            action = {"action": "FINISH", "outcomes": [bad,
-                      {"scope": "B", "status": "insufficient_evidence"}]}
-            with self.subTest(bad=bad), self.assertRaises(InvalidAction):
-                parse_selector_action(json.dumps(action), state, contract="evidence_reference")
+        for row in invalid_rows:
+            action = {"action": "FINISH", "outcomes": [row, no_evidence_outcome("B")]}
+            with self.subTest(row=row), self.assertRaises(InvalidAction):
+                validate_action(action, contract="evidence_reference")
 
-    def test_copied_quote_contract_remains_default(self):
-        state = ready_state()
-        self.assertEqual(action_schema_for_state(state),
-                         action_schema_for_state(state, contract="copied_quote"))
+    def test_non_evidence_statuses_carry_no_ids_or_extra_fields(self):
+        for status in ("no_evidence_found", "insufficient_scope"):
+            valid = {"scope": "A", "status": status}
+            action = {"action": "FINISH", "outcomes": [valid, no_evidence_outcome("B")]}
+            self.assertEqual(validate_action(action, contract="evidence_reference"), action)
+            invalid = dict(valid, evidence_ids=["ev_a"])
+            with self.subTest(status=status), self.assertRaises(InvalidAction):
+                validate_action({"action": "FINISH", "outcomes": [
+                    invalid, no_evidence_outcome("B")
+                ]}, contract="evidence_reference")
+
+    def test_reference_finish_rejects_unknown_status_and_legacy_claim(self):
+        invalid_rows = [
+            {"scope": "A", "status": "unknown"},
+            {"scope": "A", "status": "supported", "claim": "claim",
+             "evidence_ids": ["ev_a"]},
+        ]
+        for row in invalid_rows:
+            with self.subTest(row=row), self.assertRaises(InvalidAction):
+                validate_action({"action": "FINISH", "outcomes": [
+                    row, no_evidence_outcome("B")
+                ]}, contract="evidence_reference")
+
+    def test_reference_schema_has_dynamic_two_to_four_scope_cardinality(self):
+        finish = next(row for row in REFERENCE_ACTION_JSON_SCHEMA["oneOf"]
+                      if row["properties"]["action"]["const"] == "FINISH")
+        outcomes = finish["properties"]["outcomes"]
+        self.assertEqual((outcomes["minItems"], outcomes["maxItems"]), (2, 4))
+
+    def test_clarify_question_remains_bounded_and_nonempty(self):
+        valid = {"action": "CLARIFY", "question": "请说明设备型号。"}
+        self.assertEqual(validate_action(valid, contract="evidence_reference"), valid)
+        for question in ("", " " * 501):
+            with self.subTest(length=len(question)), self.assertRaises(InvalidAction):
+                validate_action({"action": "CLARIFY", "question": question},
+                                contract="evidence_reference")
+
+    def test_copied_quote_schema_keeps_its_existing_finish_contract(self):
+        finish = next(row for row in ACTION_JSON_SCHEMA["oneOf"]
+                      if row["properties"]["action"]["const"] == "FINISH")
+        self.assertIn("findings", finish["properties"])
+        self.assertNotIn("outcomes", finish["properties"])
+        action = {"action": "FINISH", "findings": []}
+        self.assertEqual(validate_action(action), action)
 
 
 if __name__ == "__main__":
