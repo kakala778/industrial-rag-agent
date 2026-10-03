@@ -23,3 +23,5 @@ class AgentState:
     answer: str = ""
     errors: list = field(default_factory=list)
     trace: list = field(default_factory=list)
+    progress: dict = field(default_factory=dict)
+    clarification_required: str = ""

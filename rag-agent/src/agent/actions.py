@@ -2,18 +2,15 @@
 
 import json
 
+from .progress import snapshot
+
 
 class InvalidAction(ValueError):
     pass
 
 
 def finish_ready(state):
-    attempted = {h["scopes"][0] for h in state.search_history}
-    if attempted != set(state.resolved_scopes):
-        return False
-    nonempty_scopes = {r["source"] for h in state.search_history for r in h["results"]}
-    looked_up_scopes = {r["source"] for r in state.looked_up_evidence.values()}
-    return nonempty_scopes <= looked_up_scopes
+    return bool(state.resolved_scopes) and not snapshot(state)["remaining_scopes"]
 
 
 def _object(pairs):

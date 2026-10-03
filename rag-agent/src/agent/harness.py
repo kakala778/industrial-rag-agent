@@ -5,6 +5,7 @@ from copy import deepcopy
 from .actions import InvalidAction, finish_ready, validate_action
 from .state import AgentState
 from .tools import ToolResult
+from .progress import diagnostics, eligible_lookup_ids, eligible_search_scopes, repeated_action, snapshot
 
 
 class AgentHarness:
@@ -19,16 +20,21 @@ class AgentHarness:
 
     @staticmethod
     def _trace(state, action, inputs, status, summary):
+        state.progress = diagnostics(state, state.progress, status)
         state.trace.append(dict(step=state.step_count, action=action,
                                 tool_input=deepcopy(inputs), tool_status=status,
                                 observation_summary=summary,
-                                state_transition=f"running->{state.status}"))
+                                state_transition=f"running->{state.status}",
+                                progress=deepcopy(state.progress)))
 
-    def run(self, query, scopes=None):
+    def run(self, query, scopes=None, *, clarification_required=""):
         if not isinstance(query, str) or not query.strip() or len(query) > 4000:
             raise ValueError("task query must be a nonempty bounded string")
         requested = list(scopes) if isinstance(scopes, (list, tuple)) else []
         state = AgentState(query, requested)
+        if not isinstance(clarification_required, str) or len(clarification_required) > 500:
+            raise ValueError("clarification requirement must be a bounded string")
+        state.clarification_required = clarification_required.strip()
         if (len(requested) != 2 or any(not isinstance(s, str) for s in requested)
                 or len(set(requested)) != 2):
             state.pending_clarification = "请明确指定两份不同的文档别名。"
@@ -37,10 +43,17 @@ class AgentHarness:
             return state
         resolved = self.session.resolve_scopes(requested)
         if resolved is None:
+            state.resolved_scopes = [s for s in requested if self.session.resolve_scopes([s]) is not None]
             state.status, state.answer = "invalid_scope", "指定的文档范围不存在。"
             self._trace(state, "PREFLIGHT", {"scopes": requested}, "invalid_scope", "scope rejected")
             return state
         state.resolved_scopes = requested.copy()
+        state.progress = snapshot(state)
+        if state.clarification_required:
+            state.pending_clarification = state.clarification_required
+            state.status, state.answer = "clarify", state.pending_clarification
+            self._trace(state, "CLARIFY", {"question": state.answer}, "ok", "missing task constraint")
+            return state
         while state.status == "running":
             if state.step_count >= self.max_steps:
                 self._budget(state, "step limit")
@@ -49,6 +62,11 @@ class AgentHarness:
             state.remaining_budget = dict(steps=self.max_steps - state.step_count,
                                           search=self.max_search_calls - state.search_calls,
                                           lookup=self.max_lookup_calls - state.lookup_calls)
+            if (not finish_ready(state)
+                    and not (state.remaining_budget["search"] > 0 and eligible_search_scopes(state))
+                    and not (state.remaining_budget["lookup"] > 0 and eligible_lookup_ids(state))):
+                self._budget(state, "no eligible tool within remaining budgets")
+                break
             action = None
             try:
                 # Selectors receive a snapshot: they cannot bypass validation by mutation.
@@ -84,7 +102,10 @@ class AgentHarness:
                 self._trace(state, kind, {"evidence_ids": [f["evidence_id"] for f in state.findings]},
                             "ok", f"{len(state.findings)} grounded excerpts; {state.comparison}")
             else:
-                self._execute(state, kind, inputs)
+                if repeated_action(state, action):
+                    self._trace(state, kind, inputs, "no_progress", "unchanged successful action; tool not executed")
+                else:
+                    self._execute(state, kind, inputs)
         return state
 
     def _validate_state_action(self, state, action):
@@ -95,6 +116,11 @@ class AgentHarness:
         elif kind == "LOOKUP":
             if action["evidence_id"] not in state.evidence_ids:
                 raise InvalidAction("unobserved evidence")
+            if not repeated_action(state, action) and action["evidence_id"] not in eligible_lookup_ids(state):
+                raise InvalidAction("uncovered candidate scope must be looked up first")
+        elif kind == "CLARIFY":
+            if not state.clarification_required:
+                raise InvalidAction("no missing user constraint; continue investigation or finish")
         elif kind == "FINISH":
             if not finish_ready(state):
                 raise InvalidAction("unsearched or unlooked-up comparison scope")

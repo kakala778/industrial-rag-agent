@@ -3,7 +3,7 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 0 harness implemented
+## Current status — Agent 0.1 progress/coverage evaluated
 
 M6–M10.1 cover structured PDF processing, failure analysis, controlled visual
 experiments, optional Hybrid retrieval and bounded parent-context reranking.
@@ -14,6 +14,13 @@ See the [design](rag-agent/docs/agent0-minimal-harness-design.md) and
 [results and usage](rag-agent/docs/agent0-results.md). Qwen action selection is
 experimental: synthetic tasks completed, but the real industrial smoke repeated
 one evidence lookup and ended in clarification without covering both sources.
+
+Agent 0.1 adds duplicate suppression and coverage-aware action eligibility.
+In a fixed-observation comparison on seven new local industrial evidence tasks,
+Qwen lookup-scope coverage rises 57.1%→100% and repeated actions fall 44→0,
+but fully relevant task success stays 0/7. Full milestone acceptance is unmet;
+quotes and applicability still fail. See the
+[Agent 0.1 results and limits](rag-agent/docs/agent0-1-progress-coverage-results.md).
 
 Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 `v0.5-local-rag-generation` remains the historical M1–M5 checkpoint.

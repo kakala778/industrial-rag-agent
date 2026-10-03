@@ -6,7 +6,7 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 0 minimal harness
+## Current Stage — Agent 0.1 progress/coverage evaluated
 
 The final pre-Agent RAG experiment is complete and frozen. Parent-context
 reranking remains offline. Agent 0 implements multi-document scoped search,
@@ -16,6 +16,13 @@ deterministic; Qwen selection is experimental and failed to cover both sources
 in the real industrial smoke. See [Agent 0 results and usage](docs/agent0-results.md),
 [design](docs/agent0-minimal-harness-design.md), the historical
 [Agent handoff](docs/agent-handoff.md) and [M10.1 results](docs/m10-parent-context-controlled-experiment.md).
+
+Agent 0.1 suppresses unchanged successful actions and requires mechanical scope
+coverage before FINISH. On seven new local evidence tasks with frozen SEARCH
+observations, Qwen lookup coverage improves 57.1%→100% and repeats 44→0, but
+fully relevant success remains 0/7. Full milestone acceptance is unmet; quote
+fidelity and applicability remain experimental. See
+[Agent 0.1 results, protocol and limits](docs/agent0-1-progress-coverage-results.md).
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
 

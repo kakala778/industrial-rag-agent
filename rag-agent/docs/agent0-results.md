@@ -1,5 +1,11 @@
 # Agent 0 — implementation, verification and limits
 
+Historical implementation snapshot: the changes described below were subsequently
+committed and pushed as `e474f1e`. The current development checkout is the user's
+`D:` project directory. References below to uncommitted changes and an attached
+worktree describe the original Agent0 run, not current Git state. See
+[Agent 0.1 progress/coverage results](agent0-1-progress-coverage-results.md).
+
 2026-10-03; baseline `e4e3eb0`, local branch `codex/agent0-minimal-harness`.
 No commits, merge, tag, PR or push. Implementation is in the attached worktree,
 not copied over the original checkout. No dependencies installed; frozen RAG

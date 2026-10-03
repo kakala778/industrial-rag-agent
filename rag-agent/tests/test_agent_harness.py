@@ -181,9 +181,9 @@ class AgentHarnessTests(unittest.TestCase):
                 for scope in ("A", "B"):
                     if not any(h["scopes"] == [scope] for h in state.search_history):
                         return {"action": "SEARCH", "query": state.original_query, "scopes": [scope]}
-                for eid in state.evidence_ids:
-                    if eid not in state.looked_up_evidence:
-                        return {"action": "LOOKUP", "evidence_id": eid}
+                from src.agent.progress import eligible_lookup_ids
+                for eid in eligible_lookup_ids(state):
+                    return {"action": "LOOKUP", "evidence_id": eid}
                 return {"action": "FINISH", "findings": [{"scope": row["source"],
                         "evidence_id": eid, "quote": row["text"]} for eid, row in state.looked_up_evidence.items()]}
             state = self.Harness(session, choose).run("parameters", ["A", "B"])

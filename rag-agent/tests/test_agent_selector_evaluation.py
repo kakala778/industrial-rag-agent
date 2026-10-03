@@ -46,8 +46,9 @@ class AgentSelectorEvaluationTests(unittest.TestCase):
         from src.agent.state import AgentState
         state = AgentState("p", ["A", "B"], ["A", "B"])
         state.evidence_ids = ["ev_seen"]
-        state.search_history = [{"scopes": ["A"], "results": [{"evidence_id": "ev_seen", "source": "A"}]},
-                                {"scopes": ["B"], "results": []}]
+        state.search_history = [{"query": "p", "scopes": ["A"], "status": "ok",
+                                 "results": [{"evidence_id": "ev_seen", "source": "A"}]},
+                                {"query": "p", "scopes": ["B"], "status": "no_evidence", "results": []}]
         schema = action_schema_for_state(state)
         actions = [s["properties"]["action"]["const"] for s in schema["oneOf"]]
         self.assertNotIn("FINISH", actions)
