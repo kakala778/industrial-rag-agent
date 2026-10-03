@@ -6,13 +6,141 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — M10.1 complete; Agent next
+## Current Stage — M11 complete; M12 scope pending
 
-**ENTER AGENT.** The final pre-Agent RAG experiment is complete. Parent-context
-reranking remains offline and is not adopted in the application. Agent itself
-is not implemented; the next work is a bounded Document Research workflow with
-search, original-evidence lookup, task state and grounding checks. See the
+M11 is a bounded, local-first industrial-document research demo. Supply one
+task and two to four explicit document aliases; the Agent searches only those
+documents, looks up observed evidence IDs, and ends with a Markdown report or
+a terminal clarification. The report contains only current-session
+host-rendered evidence and neutral per-scope status. A citation identifies
+where text came from; it does not prove relevance, correctness, applicability,
+equivalence or compliance. FINISH accepts no generated engineering conclusion.
+
+The default selector is local Qwen using the evidence-reference contract.
+`--policy deterministic` supports offline mechanics/smoke checks and makes no
+relevance assessment. `--policy deepseek-reference` is opt-in, requires
+`DEEPSEEK_API_KEY`, and prints a disclosure before sending task/evidence text to
+the provider. Reports are UTF-8 files under ignored `outputs/agent11/`; they
+contain no input paths, trace, prompt, raw provider response or credentials.
+The legacy `--query/--scopes` interface remains separate for Agent 0's
+two-scope compatibility workflow.
+
+Run from the `rag-agent/` directory:
+
+```powershell
+python -m src.agent_demo --task "查询设备额定压力" `
+  --document A=design.pdf `
+  --document B=manual.pdf `
+  --document C=standard.pdf
+```
+
+Scope statuses are deliberately limited: `evidence_found` means source IDs
+were selected for display; `no_evidence_found` means the configured search
+returned no candidates; `insufficient_scope` means candidates were returned
+and at least one was looked up, but no ID was selected. Neither search absence
+nor Agent selection establishes document-level absence or semantic
+correctness. Clarification ends the current run; rerun with the missing task
+constraint.
+
+RAG defaults and retrieval parameters remain frozen. Agent 1 semantic
+comparison remains evaluation-only and is not used in this demo. See the
+[M11 design](docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md),
+[implementation plan](docs/superpowers/plans/2026-10-03-m11-evidence-research-agent.md)
+and [Agent handoff](docs/agent-handoff.md).
+
+M11 verification passed 345 tests and a synthetic three-document CLI smoke.
+The smoke verifies mechanics and report privacy, not live-model selection
+quality or industrial-PDF relevance. M12 has not started or received an
+approved scope; the recommended kickoff is a human-reviewed demo-readiness
+pilot. See the M12 handoff notes before selecting its target.
+
+## Previous Decision — Agent 1.3 ROI review
+
+Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 accepted 15/17
+outputs and achieved 14/17 strict verdict accuracy, but accepted unit and
+condition/applicability accuracy remain 8/15 and 7/15. The semantic comparator
+is not ready to support engineering decisions and remains evaluation-only. At
+that decision point, the next recommended milestone was an end-to-end demo
+centered on scoped evidence, host-rendered references, and honest incomplete
+results; any semantic verdict must remain clearly experimental. See the
+[Agent 1.3 ROI review](docs/agent1-3-semantic-comparator-roi-review.md) and
+[Agent 1.2 results](docs/agent1-2-structured-output-validation.md).
+
+RAG and Agent 0 remain frozen. Agent 1.2's 17-request pass had no API errors or
+retries; raw outputs stay in ignored `outputs/agent1_2/`. The Responses
+comparator remains isolated from the application default.
+
+## Historical Stage — Agent 1.1 semantic contract validation
+
+Agent 1.1 evaluated the same balanced 17-task benchmark against original PDF
+pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`. Host validation
+accepted one response; 16 were recorded as `invalid_schema`. The sole accepted
+output got its verdict right but marked known value and unit dimensions
+`not_applicable`. See the
+[Agent 1.1 report](docs/agent1-1-balanced-semantic-benchmark.md).
+
+The original Agent 1 report remains historical and unchanged. Agent 1.1 did
+not run retrieval or modify evidence handling or citation rendering.
+
+## Historical Stage — Agent 1 semantic comparison experiment
+
+Agent 1's bounded semantic-comparison pass is complete. It used four bilateral
+supported Agent 0.3 evidence pairs; four other tasks were deterministically
+preflighted as insufficient because of retrieval-bound evidence, an unsupported
+side, or unresolved scope. All four model verdicts matched the provisional
+`NOT_COMPARABLE` labels, but that single-class cohort does not measure verdict
+discrimination. Object/field accuracy was 4/4, value and unit accuracy 1/4 each,
+and condition/applicability accuracy 3/4. The run remains experimental and does
+not establish industrial semantic reliability. The semantic GT is AI-assisted
+and provisional. See the [Agent 1 report](docs/agent1-semantic-evidence-comparison.md).
+
+RAG and Agent 0 remain frozen; Agent 1 did not change retrieval or citation
+rendering. At that time, no later milestone had started.
+
+## Agent 0.3 bounded evidence references
+
+The final pre-Agent RAG experiment is complete and frozen. Parent-context
+reranking remains offline. Agent 0 implements multi-document scoped search,
+bounded original-evidence lookup, task state, strict JSON actions, budgets and
+citation validation without an Agent framework. The default policy is
+deterministic; Qwen selection is experimental and failed to cover both sources
+in the real industrial smoke. See [Agent 0 results and usage](docs/agent0-results.md),
+[design](docs/agent0-minimal-harness-design.md), the historical
 [Agent handoff](docs/agent-handoff.md) and [M10.1 results](docs/m10-parent-context-controlled-experiment.md).
+
+Agent 0.1 suppresses unchanged successful actions and requires mechanical scope
+coverage before FINISH. On seven new local evidence tasks with frozen SEARCH
+observations, Qwen lookup coverage improves 57.1%→100% and repeats 44→0, but
+fully relevant success remains 0/7. Full milestone acceptance is unmet; quote
+fidelity and applicability remain experimental. See
+[Agent 0.1 results, protocol and limits](docs/agent0-1-progress-coverage-results.md).
+
+Agent 0.2 keeps the harness/RAG fixed and compares Qwen with optional DeepSeek
+Flash. On five candidate-available tasks, final ID selection is 1/5 vs 5/5 and
+fully relevant copied-quote success 0/5 vs 4/5; two tasks remain retrieval-bound.
+See [Agent 0.2 results and costs](docs/agent0-2-evidence-selection-model-comparison.md).
+`--policy deepseek` opts into the official paid API and reads only
+`DEEPSEEK_API_KEY` from the environment; task/evidence excerpts leave the machine.
+The default remains deterministic and local Qwen stays available. The controlled
+runner in the report enforces this experiment's cost cap; ordinary CLI usage is
+separate from that frozen comparison.
+
+Agent 0.3 adds `--policy deepseek-reference`: DeepSeek selects evidence IDs and
+the host validates them and renders bounded excerpts/provenance from the active
+parsed cache. On five candidate-available tasks, ID selection remains 5/5 and
+fully relevant task success is 5/5 versus 4/5 under Agent 0.2's copied-quote
+contract. Citations were host-authentic for 11/11 selected IDs, including two
+retrieval-bound references reported separately. This remains experimental;
+the relevance oracle is **not independently human-verified**. The local review
+sheet and experiment results are ignored artifacts. See the
+[Agent 0.3 report](docs/agent0-3-bounded-evidence-contract.md) and the current
+[Agent benchmark review status](docs/agent-benchmark-review-status.md). The
+post-run AI-assisted PDF audit repaired provisional expected evidence IDs and
+conditions; offline rescoring preserved the 5/5 candidate-available ID and
+fully relevant Agent 0.3 results. At the end of Agent 0.3, this supported
+running a semantic experiment with provisional GT, not industrial use. The
+later Agent 1.3 review freezes semantic comparison for an evidence-first demo;
+see the current [Agent 1.3 ROI decision](docs/agent1-3-semantic-comparator-roi-review.md).
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
 
@@ -66,6 +194,8 @@ Answer
 - Markdown and PDF retrieval evaluation datasets and scripts
 - Local LLM generation through Ollama with `qwen3:4b`
 - Retrieved-source citations in the RAG CLI
+- Agent 0 scoped evidence investigation with SEARCH / LOOKUP / CLARIFY / FINISH,
+  deterministic execution and optional locally validated Qwen JSON selection
 
 ## Quick Start
 
@@ -132,7 +262,7 @@ This baseline does not include:
 - Document version management
 - Multi-tenant support
 - Monitoring
-- Agent workflow
+- Durable Agent execution/resume and automated engineering semantic comparison
 - Memory
 - Web API
 
