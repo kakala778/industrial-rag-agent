@@ -1,6 +1,27 @@
-# Agent Handoff — after M10.1
+# Agent Handoff
 
-Updated: 2026-10-02. Experiment checkpoint: `2918f99`.
+Updated: 2026-10-03.
+
+## Current status — Agent 1 semantic comparison
+
+The bounded Agent 1 experiment is complete. Four of eight frozen tasks entered
+DeepSeek Flash; the other four were stopped by deterministic preflight. Verdict
+accuracy was 4/4, but every expected verdict was `NOT_COMPARABLE`, so this does
+not measure three-way verdict discrimination. Object/field alignment scored
+4/4, value and unit alignment 1/4 each, and condition/applicability 3/4. Two
+tasks remain retrieval-bound and were not counted as semantic-model failures.
+The provisional semantic GT is AI-assisted, not independently human-verified.
+
+Recommendation: if the route continues, first validate the contract against a
+small, balanced, independently adjudicated semantic benchmark. Keep retrieval
+and Agent 0 frozen. Defer unit conversion, operator/modality scoring,
+cross-document research, and any engineering recommendation until the current
+dimension-labeling weakness is resolved. No later milestone has started.
+See the [Agent 1 report](agent1-semantic-evidence-comparison.md).
+
+## Historical pre-Agent handoff — after M10.1 (2026-10-02)
+
+Experiment checkpoint at that time: `2918f99`.
 
 ## Decision and implementation status
 

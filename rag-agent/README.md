@@ -6,7 +6,22 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 0.3 bounded evidence references
+## Current Stage — Agent 1 semantic comparison experiment
+
+Agent 1's bounded semantic-comparison pass is complete. It used four bilateral
+supported Agent 0.3 evidence pairs; four other tasks were deterministically
+preflighted as insufficient because of retrieval-bound evidence, an unsupported
+side, or unresolved scope. All four model verdicts matched the provisional
+`NOT_COMPARABLE` labels, but that single-class cohort does not measure verdict
+discrimination. Object/field accuracy was 4/4, value and unit accuracy 1/4 each,
+and condition/applicability accuracy 3/4. The run remains experimental and does
+not establish industrial semantic reliability. The semantic GT is AI-assisted
+and provisional. See the [Agent 1 report](docs/agent1-semantic-evidence-comparison.md).
+
+RAG and Agent 0 remain frozen; Agent 1 did not change retrieval or citation
+rendering, and no later milestone has started.
+
+## Agent 0.3 bounded evidence references
 
 The final pre-Agent RAG experiment is complete and frozen. Parent-context
 reranking remains offline. Agent 0 implements multi-document scoped search,
