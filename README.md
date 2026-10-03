@@ -3,20 +3,31 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 1.1 semantic contract validation
+## Current status — Agent 1.3 ROI review
 
-Agent 1.1 evaluated a balanced 17-task benchmark reviewed against original PDF
-pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`. DeepSeek Flash
-made 17 requests; strict host validation rejected 16 outputs as
-`invalid_schema`. The single accepted output got its verdict right but marked
-known value and unit dimensions `not_applicable`. Overall strict verdict
-accuracy is 1/17 (5.9%). The decision is
-`SEMANTIC_COMPARATOR_NOT_READY`; Agent 2 has not started. See the
-[Agent 1.1 report](rag-agent/docs/agent1-1-balanced-semantic-benchmark.md).
+Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 accepted 15/17
+outputs and achieved 14/17 strict verdict accuracy, but accepted unit and
+condition/applicability accuracy remain 8/15 and 7/15. The comparator is not
+ready to support engineering decisions and remains evaluation-only. The next
+recommended milestone is an end-to-end demo centered on scoped evidence,
+host-rendered references, and honest incomplete results; any semantic verdict
+must remain clearly experimental. See the
+[Agent 1.3 ROI review](rag-agent/docs/agent1-3-semantic-comparator-roi-review.md)
+and [Agent 1.2 results](rag-agent/docs/agent1-2-structured-output-validation.md).
 
-The original Agent 1 result remains documented separately. RAG and Agent 0
-actions are frozen; Agent 1.1 did not run retrieval, and the original v1
-semantic comparator remains the default.
+RAG and Agent 0 remain frozen. Agent 1.2's 17-request pass had no API errors or
+retries; raw outputs remain under ignored `rag-agent/outputs/agent1_2/`.
+
+## Historical status — Agent 1.1 semantic contract validation
+
+Agent 1.1 used the balanced 17-task benchmark reviewed against original PDF
+pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`. Its single
+schema-accepted output got the verdict right but marked known value and unit
+dimensions `not_applicable`; 16 other outputs were recorded as `invalid_schema`.
+See the [Agent 1.1 report](rag-agent/docs/agent1-1-balanced-semantic-benchmark.md).
+
+The original Agent 1 result remains documented separately. Agent 1.1 did not
+run retrieval, and the original v1 semantic comparator remains the default.
 
 ## Historical status — Agent 0.3 bounded evidence references
 
@@ -138,6 +149,7 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | Agent 0.1 | [Progress, coverage and evidence relevance](rag-agent/docs/agent0-1-progress-coverage-results.md) |
 | Agent 0.2 | [Evidence selection and DeepSeek comparison](rag-agent/docs/agent0-2-evidence-selection-model-comparison.md) |
 | Agent 0.3 | [Bounded evidence reference contract](rag-agent/docs/agent0-3-bounded-evidence-contract.md) |
+| Agent 1.2–1.3 | [Structured output validation](rag-agent/docs/agent1-2-structured-output-validation.md), [semantic comparator ROI review](rag-agent/docs/agent1-3-semantic-comparator-roi-review.md) |
 
 ## Verification and private data
 

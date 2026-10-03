@@ -6,21 +6,33 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 1.1 semantic contract validation
+## Current Stage — Agent 1.3 ROI review
 
-Agent 1.1 evaluated a separate, balanced 17-task benchmark reviewed against
-original PDF pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`.
-DeepSeek Flash made 17 requests; strict host validation rejected 16 outputs as
-`invalid_schema`. The single accepted output got its verdict right but marked
-known value and unit dimensions `not_applicable`. Overall strict verdict
-accuracy is 1/17 (5.9%). The decision is
-`SEMANTIC_COMPARATOR_NOT_READY`; do not start Agent 2. See the
+Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 accepted 15/17
+outputs and achieved 14/17 strict verdict accuracy, but accepted unit and
+condition/applicability accuracy remain 8/15 and 7/15. The semantic comparator
+is not ready to support engineering decisions and remains evaluation-only. The
+next recommended milestone is an end-to-end demo centered on scoped evidence,
+host-rendered references, and honest incomplete results; any semantic verdict
+must remain clearly experimental. See the
+[Agent 1.3 ROI review](docs/agent1-3-semantic-comparator-roi-review.md) and
+[Agent 1.2 results](docs/agent1-2-structured-output-validation.md).
+
+RAG and Agent 0 remain frozen. Agent 1.2's 17-request pass had no API errors or
+retries; raw outputs stay in ignored `outputs/agent1_2/`. The Responses
+comparator remains isolated from the application default.
+
+## Historical Stage — Agent 1.1 semantic contract validation
+
+Agent 1.1 evaluated the same balanced 17-task benchmark against original PDF
+pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`. Host validation
+accepted one response; 16 were recorded as `invalid_schema`. The sole accepted
+output got its verdict right but marked known value and unit dimensions
+`not_applicable`. See the
 [Agent 1.1 report](docs/agent1-1-balanced-semantic-benchmark.md).
 
-The original Agent 1 report remains historical and unchanged. RAG and Agent 0
-actions remain frozen; this evaluation did not run retrieval or modify evidence
-handling or citation rendering. The original v1 semantic comparator remains
-the default; v2 prompt/parser injection is used only by this evaluation runner.
+The original Agent 1 report remains historical and unchanged. Agent 1.1 did
+not run retrieval or modify evidence handling or citation rendering.
 
 ## Historical Stage — Agent 1 semantic comparison experiment
 
@@ -77,8 +89,10 @@ sheet and experiment results are ignored artifacts. See the
 [Agent benchmark review status](docs/agent-benchmark-review-status.md). The
 post-run AI-assisted PDF audit repaired provisional expected evidence IDs and
 conditions; offline rescoring preserved the 5/5 candidate-available ID and
-fully relevant Agent 0.3 results. The benchmark is ready for a semantic Agent
-experiment with provisional GT, not for industrial use.
+fully relevant Agent 0.3 results. At the end of Agent 0.3, this supported
+running a semantic experiment with provisional GT, not industrial use. The
+later Agent 1.3 review freezes semantic comparison for an evidence-first demo;
+see the current [Agent 1.3 ROI decision](docs/agent1-3-semantic-comparator-roi-review.md).
 
 The experiment checkpoint is `2918f99` on `codex/m9-hybrid-retrieval`.
 

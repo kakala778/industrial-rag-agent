@@ -2,21 +2,33 @@
 
 Updated: 2026-10-03.
 
-## Current status — Agent 1.1 semantic contract validation
+## Current status — Agent 1.3 ROI review
 
-The independent benchmark contains 17 tasks: 5 `EQUIVALENT`, 6 `DIFFERENT`,
-and 6 `NOT_COMPARABLE`. Three original PDFs and 12 pages were visually
-reviewed; selected excerpts and all eight registered PDF hashes were checked
-before the one DeepSeek Flash pass. GT is `ai_pdf_reviewed`, not
-human-verified. Sixteen of 17 responses failed strict schema validation. The
-single accepted result matched its verdict but incorrectly labeled known value
-and unit dimensions `not_applicable`. Strict verdict accuracy is 1/17 (5.9%).
+Agent 1 is frozen for a bounded evidence-first demo. Agent 1.2 used the same
+frozen 17-task cohort and DeepSeek Responses `json_schema`: 15/17 passed the
+full Host contract, strict verdict accuracy was 14/17, accepted-output verdict
+accuracy was 14/15, and accepted dimension accuracy was object 15/15, value
+13/15, unit 8/15, and condition/applicability 7/15. Two outputs were safely
+rejected by the existing consistency validator. GT remains AI-reviewed, not
+independently human-adjudicated.
 
-**Decision: `SEMANTIC_COMPARATOR_NOT_READY`. Do not start Agent 2.** Diagnose
-the v2 schema incompatibility and contract adherence offline before considering
-any further inference. Keep RAG, Agent 0, retrieval, and citation handling
-frozen. Agent 1's original single-class run remains historical and unchanged.
-See the [Agent 1.1 report](agent1-1-balanced-semantic-benchmark.md) and the
+**Decision: `AGENT1_FROZEN_FOR_DEMO`.** Proceed toward an end-to-end demo around
+scoped evidence research, host-rendered references, and honest incomplete or
+unsupported outcomes. Agent 1.2 remains evaluation-only and is not suitable
+for authoritative engineering comparisons. If shown, its assessments must be
+clearly experimental and paired with source evidence. This review does not
+start Agent 2. RAG and Agent 0 remain frozen. No new model pass was run; see the
+[Agent 1.3 ROI review](agent1-3-semantic-comparator-roi-review.md) and the
+[Agent 1.2 report](agent1-2-structured-output-validation.md).
+
+## Historical status — Agent 1.1 semantic contract validation
+
+Agent 1.1 made 17 requests; strict host validation rejected 16 outputs as
+`invalid_schema`. The single accepted result matched its verdict but marked
+known value and unit dimensions `not_applicable`. Strict verdict accuracy was
+1/17 (5.9%). The historical raw responses were not saved, so the exact causes
+of those schema rejections remain unavailable. See the
+[Agent 1.1 report](agent1-1-balanced-semantic-benchmark.md) and the
 [historical Agent 1 report](agent1-semantic-evidence-comparison.md).
 
 ## Historical status — Agent 1 semantic comparison
