@@ -6,7 +6,23 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — Agent 1 semantic comparison experiment
+## Current Stage — Agent 1.1 semantic contract validation
+
+Agent 1.1 evaluated a separate, balanced 17-task benchmark reviewed against
+original PDF pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`.
+DeepSeek Flash made 17 requests; strict host validation rejected 16 outputs as
+`invalid_schema`. The single accepted output got its verdict right but marked
+known value and unit dimensions `not_applicable`. Overall strict verdict
+accuracy is 1/17 (5.9%). The decision is
+`SEMANTIC_COMPARATOR_NOT_READY`; do not start Agent 2. See the
+[Agent 1.1 report](docs/agent1-1-balanced-semantic-benchmark.md).
+
+The original Agent 1 report remains historical and unchanged. RAG and Agent 0
+actions remain frozen; this evaluation did not run retrieval or modify evidence
+handling or citation rendering. The original v1 semantic comparator remains
+the default; v2 prompt/parser injection is used only by this evaluation runner.
+
+## Historical Stage — Agent 1 semantic comparison experiment
 
 Agent 1's bounded semantic-comparison pass is complete. It used four bilateral
 supported Agent 0.3 evidence pairs; four other tasks were deterministically
@@ -19,7 +35,7 @@ not establish industrial semantic reliability. The semantic GT is AI-assisted
 and provisional. See the [Agent 1 report](docs/agent1-semantic-evidence-comparison.md).
 
 RAG and Agent 0 remain frozen; Agent 1 did not change retrieval or citation
-rendering, and no later milestone has started.
+rendering. At that time, no later milestone had started.
 
 ## Agent 0.3 bounded evidence references
 

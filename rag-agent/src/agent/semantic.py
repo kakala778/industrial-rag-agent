@@ -233,14 +233,18 @@ class DeepSeekSemanticComparator:
 
     URL = "https://api.deepseek.com/chat/completions"
 
-    def __init__(self, *, timeout=90, max_tokens=384, budget=None, transport=None):
+    def __init__(self, *, timeout=90, max_tokens=384, budget=None, transport=None,
+                 message_builder=semantic_messages, output_parser=parse_semantic_output):
         if (type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0
-                or type(max_tokens) is not int or not 1 <= max_tokens <= 512):
+                or type(max_tokens) is not int or not 1 <= max_tokens <= 512
+                or not callable(message_builder) or not callable(output_parser)):
             raise ValueError("invalid semantic API limits")
         self.timeout = timeout
         self.max_tokens = max_tokens
         self.budget = budget
         self.transport = transport or urlopen
+        self.message_builder = message_builder
+        self.output_parser = output_parser
         self.events = []
 
     def compare(self, comparison_request, excerpts_a, excerpts_b):
@@ -249,7 +253,7 @@ class DeepSeekSemanticComparator:
             raise SemanticAPIError("deepseek:missing_key")
         payload = {
             "model": "deepseek-flash",
-            "messages": semantic_messages(comparison_request, excerpts_a, excerpts_b),
+            "messages": self.message_builder(comparison_request, excerpts_a, excerpts_b),
             "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
             "stream": False,
@@ -292,7 +296,7 @@ class DeepSeekSemanticComparator:
             content = choice["message"]["content"]
             if type(content) is not str:
                 raise InvalidSemanticOutput("semantic content is not text")
-            result = parse_semantic_output(content)
+            result = self.output_parser(content)
             return result
         except HTTPError as exc:
             event["latency_ms"] = round((time.monotonic() - started) * 1000, 3)

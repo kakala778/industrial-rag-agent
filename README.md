@@ -3,7 +3,22 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — Agent 0.3 bounded evidence references
+## Current status — Agent 1.1 semantic contract validation
+
+Agent 1.1 evaluated a balanced 17-task benchmark reviewed against original PDF
+pages: 5 `EQUIVALENT`, 6 `DIFFERENT`, and 6 `NOT_COMPARABLE`. DeepSeek Flash
+made 17 requests; strict host validation rejected 16 outputs as
+`invalid_schema`. The single accepted output got its verdict right but marked
+known value and unit dimensions `not_applicable`. Overall strict verdict
+accuracy is 1/17 (5.9%). The decision is
+`SEMANTIC_COMPARATOR_NOT_READY`; Agent 2 has not started. See the
+[Agent 1.1 report](rag-agent/docs/agent1-1-balanced-semantic-benchmark.md).
+
+The original Agent 1 result remains documented separately. RAG and Agent 0
+actions are frozen; Agent 1.1 did not run retrieval, and the original v1
+semantic comparator remains the default.
+
+## Historical status — Agent 0.3 bounded evidence references
 
 M6–M10.1 cover structured PDF processing, failure analysis, controlled visual
 experiments, optional Hybrid retrieval and bounded parent-context reranking.

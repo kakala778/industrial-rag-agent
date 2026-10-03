@@ -2,7 +2,24 @@
 
 Updated: 2026-10-03.
 
-## Current status — Agent 1 semantic comparison
+## Current status — Agent 1.1 semantic contract validation
+
+The independent benchmark contains 17 tasks: 5 `EQUIVALENT`, 6 `DIFFERENT`,
+and 6 `NOT_COMPARABLE`. Three original PDFs and 12 pages were visually
+reviewed; selected excerpts and all eight registered PDF hashes were checked
+before the one DeepSeek Flash pass. GT is `ai_pdf_reviewed`, not
+human-verified. Sixteen of 17 responses failed strict schema validation. The
+single accepted result matched its verdict but incorrectly labeled known value
+and unit dimensions `not_applicable`. Strict verdict accuracy is 1/17 (5.9%).
+
+**Decision: `SEMANTIC_COMPARATOR_NOT_READY`. Do not start Agent 2.** Diagnose
+the v2 schema incompatibility and contract adherence offline before considering
+any further inference. Keep RAG, Agent 0, retrieval, and citation handling
+frozen. Agent 1's original single-class run remains historical and unchanged.
+See the [Agent 1.1 report](agent1-1-balanced-semantic-benchmark.md) and the
+[historical Agent 1 report](agent1-semantic-evidence-comparison.md).
+
+## Historical status — Agent 1 semantic comparison
 
 The bounded Agent 1 experiment is complete. Four of eight frozen tasks entered
 DeepSeek Flash; the other four were stopped by deterministic preflight. Verdict
