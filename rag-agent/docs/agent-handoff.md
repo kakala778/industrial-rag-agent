@@ -2,7 +2,35 @@
 
 Updated: 2026-10-04.
 
-## Current status — M11 Evidence Research Agent
+## Current status — M12.2 Industrial Evidence Research Demo Case
+
+M12.2 packaged and reran three real-document tasks through the existing CLI
+against the M12.1 local 72-page communication transmission/access
+specification using alias `S1`, the existing PyMuPDF loader,
+`KnowledgeBaseSession`, the bounded Agent loop, and local Qwen. Each trace
+followed `SEARCH -> LOOKUP -> FINISH`; every LOOKUP ID was observed in an
+earlier SEARCH, and every FINISH passed host validation. Q1 and Q2 ended
+`finished` with one citation each on physical PDF pages 21 and 10. Q3 looked up
+a candidate but selected no evidence, ending `finished` with scope status
+`insufficient_scope` and no citation. This does not prove document-wide
+absence. The sanitized case table and reproduction instructions are in the
+[M12.2 report](m12-demo-case-report.md); the earlier validation remains in the
+[M12.1 report](m12-single-document-demo-report.md).
+
+Citation pages are 1-based physical PDF pages and may differ from printed
+footer numbers. With the unchanged PyMuPDF path, provenance identifies a
+page-level `document` block, not a table-cell location. The cited pages were
+re-rendered and visually reviewed for M12.2. Private PDFs, exact tasks,
+excerpts and generated reports remain local under ignored inputs and
+`outputs/agent11/`; traces were checked in memory and not persisted.
+
+To permit a genuine single-PDF run, `evidence_reference` now accepts one to
+four explicit scopes. `copied_quote` remains exactly two-scope. This small
+contract extension did not change retrieval defaults, ranking parameters,
+Agent 1, or the action set. M12.2 changed only demo packaging and
+documentation. Agent 2 has not started; no next milestone is specified.
+
+## Historical status — M11 Evidence Research Agent
 
 M11 adds a local-first `python -m src.agent_demo --task ... --document
 ALIAS=PATH` interface for two to four explicit document scopes. The existing
@@ -38,23 +66,11 @@ exhaustion, preliminary-report labeling, and absence of source absolute paths.
 It did not evaluate live Qwen/DeepSeek semantic selection or industrial-PDF
 evidence relevance.
 
-## Next milestone — M12 kickoff pending scope selection
+## Next milestone — not specified
 
-M12 has not started, and no M12 scope is recorded in the repository or current
-GitHub issues. The recommended first option is a bounded demo-readiness pilot:
-freeze a small set of user-approved tasks and document scopes, run M11 with the
-chosen local selector, and manually audit source/page/block, excerpt fidelity,
-and task completion. Record failures by parsing, retrieval, action selection,
-evidence relevance, or reporting layer before considering any implementation
-change. Keep RAG and the Agent 1 semantic comparator frozen unless new evidence
-directly identifies one as the blocker.
-
-This is a kickoff proposal, not an approved M12 specification. The older M10
-architecture review also lists a troubleshooting evidence assistant, but it
-requires a reliable operating-data source that is not currently part of the
-demo. Do not let it make engineering or safety recommendations from document
-retrieval alone. Confirm the M12 audience, demo surface, selected task set, and
-whether the first pilot should use local Qwen before writing its formal spec.
+No follow-up beyond M12.2 is recorded. Preserve the current evidence-first
+boundary until a concrete next task is defined. Keep RAG and Agent 1 frozen;
+do not infer that the demo is safe for engineering or compliance decisions.
 
 ## Previous status — Agent 1.3 ROI review
 

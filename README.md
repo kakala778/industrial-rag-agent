@@ -3,39 +3,39 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — M11 complete; M12 scope pending
+## Current status — M12.2 demo case packaged
 
-M11 provides a local-first research demo for two to four explicitly named
-documents. It runs bounded SEARCH / LOOKUP / CLARIFY / FINISH actions and writes
-a private Markdown report with host-rendered evidence references and neutral
-scope statuses. Local Qwen is the default; deterministic mode is for offline
-mechanics checks, and the explicit DeepSeek reference mode discloses that task
-and selected evidence text leave the machine. The report makes no engineering
-or compliance verdict. See the
-[M11 design and implementation plan](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md)
-and [Agent handoff](rag-agent/docs/agent-handoff.md). The current implementation
-passed 345 unit tests and a synthetic three-document CLI smoke; live model
-quality and industrial-PDF evidence relevance were not evaluated in that smoke.
+M12.2 reran three tasks through the existing CLI against the M12.1 local
+72-page communication transmission/access specification. Normal and structured
+lookup each produced one verified host-rendered citation; the missing-field
+case finished with scope status `insufficient_scope` and no citation. All three
+traces followed `SEARCH -> LOOKUP -> FINISH`, and the LOOKUP IDs came from
+observed SEARCH results. This is a bounded demo check, not an accuracy
+benchmark or engineering verdict. The private PDF, exact task text, excerpts, and generated reports
+remain local under ignored paths. See the
+[M12.2 demo case](rag-agent/docs/m12-demo-case-report.md),
+[M12.1 validation report](rag-agent/docs/m12-single-document-demo-report.md),
+[M11 design](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md)
+and [Agent handoff](rag-agent/docs/agent-handoff.md).
 
-M12 has not started and has no approved scope. The recommended kickoff is a
-small, human-reviewed demo-readiness pilot using explicitly selected documents
-and tasks. The existing architecture review's troubleshooting-agent candidate
-still depends on a reliable operating-data source and must not be treated as
-approved scope. See the M12 section in the handoff before choosing a target.
+The `evidence_reference` CLI/harness now accepts one to four explicit scopes;
+the legacy copied-quote Agent 0 path remains two-scope. This small contract
+extension was required because M11's two-scope minimum blocked a genuine
+single-PDF run. RAG defaults and retrieval parameters remain unchanged.
 
 Run from `rag-agent/`:
 
 ```powershell
-python -m src.agent_demo --task "查询设备额定压力" `
-  --document A=design.pdf `
-  --document B=manual.pdf `
-  --document C=standard.pdf
+python -m src.agent_demo --task "查找传输系统的环境要求" `
+  --document S1=path/to/local-specification.pdf `
+  --policy qwen
 ```
 
-The report is written under ignored `outputs/agent11/`. Citations identify
+Each report is written under ignored `outputs/agent11/`. Citations identify
 source locations; they do not establish relevance, support, correctness,
 applicability or compliance. The older `--query/--scopes` invocation remains
-available for the two-scope Agent 0 compatibility path.
+available for the two-scope Agent 0 compatibility path. No next milestone is
+recorded; RAG and Agent 1 remain frozen.
 
 ## Previous decision — Agent 1.3 ROI review
 
@@ -185,7 +185,8 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | Agent 0.3 | [Bounded evidence reference contract](rag-agent/docs/agent0-3-bounded-evidence-contract.md) |
 | Agent 1.2–1.3 | [Structured output validation](rag-agent/docs/agent1-2-structured-output-validation.md), [semantic comparator ROI review](rag-agent/docs/agent1-3-semantic-comparator-roi-review.md) |
 | M11 | [Evidence Research Agent design and implementation plan](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md), [Agent handoff](rag-agent/docs/agent-handoff.md) |
-| M12 | Kickoff scope pending; see the [Agent handoff](rag-agent/docs/agent-handoff.md) for the current proposal and constraints |
+| M12.1 | [Single PDF evidence research demo report](rag-agent/docs/m12-single-document-demo-report.md) |
+| M12.2 | [Industrial evidence research demo case](rag-agent/docs/m12-demo-case-report.md) |
 
 ## Verification and private data
 

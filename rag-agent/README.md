@@ -6,32 +6,33 @@ This is a minimal RAG prototype supporting Markdown/PDF document processing,
 vector retrieval, and local LLM generation. It is a learning demo, not an
 industrial-grade RAG system or production service.
 
-## Current Stage — M11 complete; M12 scope pending
+## Current Stage — M12.2 demo case packaged
 
-M11 is a bounded, local-first industrial-document research demo. Supply one
-task and two to four explicit document aliases; the Agent searches only those
-documents, looks up observed evidence IDs, and ends with a Markdown report or
-a terminal clarification. The report contains only current-session
-host-rendered evidence and neutral per-scope status. A citation identifies
-where text came from; it does not prove relevance, correctness, applicability,
-equivalence or compliance. FINISH accepts no generated engineering conclusion.
+M12.2 reran three independent real-document research tasks through the
+existing CLI against the M12.1 local 72-page communication
+transmission/access specification. Normal lookup and structured schedule
+lookup each produced one verified host-rendered citation; the missing-field
+case finished with scope status `insufficient_scope` and no citation. Every
+trace followed `SEARCH -> LOOKUP -> FINISH`; every LOOKUP ID came from an
+earlier SEARCH, and FINISH passed host validation. The case is a bounded
+demo, not an accuracy benchmark or engineering verdict. See the
+[M12.2 demo case](docs/m12-demo-case-report.md) and the
+[M12.1 validation report](docs/m12-single-document-demo-report.md).
 
-The default selector is local Qwen using the evidence-reference contract.
-`--policy deterministic` supports offline mechanics/smoke checks and makes no
-relevance assessment. `--policy deepseek-reference` is opt-in, requires
-`DEEPSEEK_API_KEY`, and prints a disclosure before sending task/evidence text to
-the provider. Reports are UTF-8 files under ignored `outputs/agent11/`; they
-contain no input paths, trace, prompt, raw provider response or credentials.
-The legacy `--query/--scopes` interface remains separate for Agent 0's
-two-scope compatibility workflow.
+The `evidence_reference` path accepts one to four explicit aliases so the
+single-PDF case can use the same bounded loop. Legacy `copied_quote` remains
+exactly two-scope. Local Qwen is the default; deterministic mode is for
+mechanics checks. Explicit `--policy deepseek-reference` remains opt-in,
+requires `DEEPSEEK_API_KEY`, and discloses that task/evidence text leaves the
+machine. UTF-8 reports are written under ignored `outputs/agent11/` without
+input paths, traces, prompts, raw provider responses, or credentials.
 
 Run from the `rag-agent/` directory:
 
 ```powershell
-python -m src.agent_demo --task "查询设备额定压力" `
-  --document A=design.pdf `
-  --document B=manual.pdf `
-  --document C=standard.pdf
+python -m src.agent_demo --task "查找传输系统的环境要求" `
+  --document S1=path/to/local-specification.pdf `
+  --policy qwen
 ```
 
 Scope statuses are deliberately limited: `evidence_found` means source IDs
@@ -46,13 +47,11 @@ RAG defaults and retrieval parameters remain frozen. Agent 1 semantic
 comparison remains evaluation-only and is not used in this demo. See the
 [M11 design](docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md),
 [implementation plan](docs/superpowers/plans/2026-10-03-m11-evidence-research-agent.md)
-and [Agent handoff](docs/agent-handoff.md).
+and [Agent handoff](docs/agent-handoff.md). No next milestone is recorded.
 
-M11 verification passed 345 tests and a synthetic three-document CLI smoke.
-The smoke verifies mechanics and report privacy, not live-model selection
-quality or industrial-PDF relevance. M12 has not started or received an
-approved scope; the recommended kickoff is a human-reviewed demo-readiness
-pilot. See the M12 handoff notes before selecting its target.
+M11 closeout passed 345 tests and a synthetic three-document CLI smoke. That
+smoke validated harness mechanics and report privacy, not live-model selection
+quality or industrial-PDF relevance; those limits remain unchanged by M12.2.
 
 ## Previous Decision — Agent 1.3 ROI review
 
