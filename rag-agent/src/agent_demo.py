@@ -53,11 +53,11 @@ def _m11_main(args):
     if (args.scopes is not None or args.save_local
             or not isinstance(args.task, str) or not args.task.strip()
             or len(args.task) > 4000):
-        print("Error: M11 requires a bounded --task and two to four --document ALIAS=PATH arguments.")
+        print("Error: M11 requires a bounded --task and one to four --document ALIAS=PATH arguments.")
         return 2
-    aliases = _document_aliases(args.document, minimum=2, maximum=4)
+    aliases = _document_aliases(args.document, minimum=1, maximum=4)
     if aliases is None:
-        print("Error: M11 requires two to four documents with unique safe aliases.")
+        print("Error: M11 requires one to four documents with unique safe aliases.")
         return 2
 
     policy_name = args.policy or "qwen"

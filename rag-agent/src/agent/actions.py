@@ -92,7 +92,7 @@ def validate_action(raw, *, contract="copied_quote"):
                     raise InvalidAction("invalid finding")
         else:
             outcomes = raw["outcomes"]
-            if not isinstance(outcomes, list) or not 2 <= len(outcomes) <= 4:
+            if not isinstance(outcomes, list) or not 1 <= len(outcomes) <= 4:
                 raise InvalidAction("invalid scope outcomes")
             seen_scopes = set()
             for row in outcomes:
@@ -148,7 +148,7 @@ REFERENCE_ACTION_JSON_SCHEMA = {
         ACTION_JSON_SCHEMA["oneOf"][2],
         {"type": "object", "properties": {
             "action": {"const": "FINISH"},
-            "outcomes": {"type": "array", "minItems": 2, "maxItems": 4,
+            "outcomes": {"type": "array", "minItems": 1, "maxItems": 4,
                           "items": REFERENCE_OUTCOME_SCHEMA}},
          "required": ["action", "outcomes"], "additionalProperties": False},
     ]}

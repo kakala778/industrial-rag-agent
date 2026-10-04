@@ -40,13 +40,13 @@ class AgentHarness:
         if not isinstance(clarification_required, str) or len(clarification_required) > 500:
             raise ValueError("clarification requirement must be a bounded string")
         state.clarification_required = clarification_required.strip()
-        min_scopes, max_scopes = ((2, 4) if self.action_contract == "evidence_reference"
+        min_scopes, max_scopes = ((1, 4) if self.action_contract == "evidence_reference"
                                   else (2, 2))
         if (not min_scopes <= len(requested) <= max_scopes
                 or any(not isinstance(s, str) for s in requested)
                 or len(set(requested)) != len(requested)):
             state.pending_clarification = (
-                "请明确指定两到四份不同的文档别名。"
+                "请明确指定一到四份不同的文档别名。"
                 if self.action_contract == "evidence_reference"
                 else "请明确指定两份不同的文档别名。")
             state.status, state.answer = "clarify", state.pending_clarification

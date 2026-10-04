@@ -65,8 +65,8 @@ class AgentReferenceHarnessTests(unittest.TestCase):
         self.session = KnowledgeBaseSession(corpus(), model=TinyEncoder(),
                                             reranker_model=TinyReranker())
 
-    def test_two_three_and_four_scopes_finish_with_host_citations_and_no_claims(self):
-        for scopes in (["A", "B"], ["A", "B", "C"], ["A", "B", "C", "D"]):
+    def test_one_to_four_scopes_finish_with_host_citations_and_no_claims(self):
+        for scopes in (["A"], ["A", "B"], ["A", "B", "C"], ["A", "B", "C", "D"]):
             session = self.session if len(scopes) == 2 else session_for(scopes)
             state = AgentHarness(session, ReferencePolicy()).run("Rated pressure", scopes)
             with self.subTest(scopes=scopes):
@@ -224,7 +224,7 @@ class AgentReferenceHarnessTests(unittest.TestCase):
         self.assertEqual(state.trace[-1]["terminal_status"], "clarify")
 
     def test_reference_scope_count_boundaries_and_copied_quote_stays_two_scope(self):
-        for scopes in (["A"], ["A", "B", "C", "D", "E"]):
+        for scopes in ([], ["A", "B", "C", "D", "E"]):
             state = AgentHarness(self.session, ReferencePolicy()).run("q", scopes)
             with self.subTest(scopes=scopes):
                 self.assertEqual(state.status, "clarify")

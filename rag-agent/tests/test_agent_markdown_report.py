@@ -51,6 +51,10 @@ class AgentMarkdownReportTests(unittest.TestCase):
                 self.assertIn("## Evidence", report)
                 self.assertIn("## Findings", report)
                 self.assertIn("## Limitations", report)
+                self.assertIn(
+                    "Evidence identifies source content but does not prove engineering correctness.",
+                    report,
+                )
                 for scope in scopes:
                     self.assertIn(f"Source `{scope}`", report)
                     self.assertIn(f"`{scope}`", report)

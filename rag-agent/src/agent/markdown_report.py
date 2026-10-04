@@ -195,7 +195,8 @@ def render_research_report(state, session):
     lines.extend([
         "",
         "## Limitations",
-        "- Citations and provenance identify source locations; they do not prove parser fidelity, relevance, support, correctness, applicability, equivalence, or compliance.",
+        "- Evidence identifies source content but does not prove engineering correctness.",
+        "- Citations and provenance also do not prove parser fidelity, relevance, support, applicability, equivalence, or compliance.",
         "- This report provides no engineering or compliance verdict.",
     ])
     if preliminary:

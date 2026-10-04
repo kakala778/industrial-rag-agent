@@ -14,7 +14,7 @@ class Agent11CliTests(unittest.TestCase):
     def test_invalid_document_count_and_aliases_fail_before_loading_or_session_setup(self):
         from src.agent_demo import main
 
-        cases = [self.documents(1), self.documents(5),
+        cases = [self.documents(0), self.documents(5),
                  ["--document=A=one.md", "--document=A=two.md"],
                  ["--document=../A=one.md", "--document=B=two.md"],
                  ["--document=A", "--document=B=two.md"]]
@@ -58,6 +58,24 @@ class Agent11CliTests(unittest.TestCase):
         self.assertNotIn("D:\\private", output.getvalue())
         self.assertNotIn("private serialized answer", output.getvalue())
         self.assertNotIn('"trace"', output.getvalue())
+
+    def test_one_explicit_document_reaches_single_scope_harness(self):
+        from src.agent_demo import main
+
+        session = object()
+        state = AgentState("check pressure", ["A"], ["A"], status="finished")
+        harness = Mock()
+        harness.run.return_value = state
+        argv = ["--task", "check pressure", *self.documents(1), "--policy", "deterministic"]
+        with patch("src.agent_demo.load_corpus", return_value={"A": []}), \
+             patch("src.agent_demo.KnowledgeBaseSession", return_value=session), \
+             patch("src.agent_demo.AgentHarness", return_value=harness), \
+             patch("src.agent_demo.write_research_report", return_value=Path("outputs/agent11/r.md")), \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(main(argv), 0)
+
+        harness.run.assert_called_once_with("check pressure", ["A"])
+        self.assertIn("Status: finished", output.getvalue())
 
     def test_local_qwen_and_deterministic_modes_use_reference_contract(self):
         from src.agent_demo import main

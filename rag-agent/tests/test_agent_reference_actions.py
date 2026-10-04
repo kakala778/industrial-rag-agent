@@ -13,20 +13,20 @@ def no_evidence_outcome(scope):
 
 
 class AgentReferenceActionTests(unittest.TestCase):
-    def test_reference_finish_accepts_two_three_and_four_unique_scope_outcomes(self):
-        for count in (2, 3, 4):
+    def test_reference_finish_accepts_one_to_four_unique_scope_outcomes(self):
+        for count in (1, 2, 3, 4):
             outcomes = [no_evidence_outcome(f"S{index}") for index in range(count)]
             action = {"action": "FINISH", "outcomes": outcomes}
             with self.subTest(count=count):
                 self.assertEqual(validate_action(action, contract="evidence_reference"), action)
 
-    def test_reference_finish_requires_two_to_four_unique_scope_outcomes(self):
+    def test_reference_finish_requires_one_to_four_unique_scope_outcomes(self):
         valid_a = no_evidence_outcome("A")
         valid_b = no_evidence_outcome("B")
         valid_c = no_evidence_outcome("C")
         valid_d = no_evidence_outcome("D")
-        for outcomes in ([valid_a], [valid_a, valid_b, valid_c, valid_d,
-                                     no_evidence_outcome("E")],
+        for outcomes in ([], [valid_a, valid_b, valid_c, valid_d,
+                              no_evidence_outcome("E")],
                          [valid_a, no_evidence_outcome("A")]):
             with self.subTest(outcomes=outcomes), self.assertRaises(InvalidAction):
                 validate_action({"action": "FINISH", "outcomes": outcomes},
@@ -74,11 +74,11 @@ class AgentReferenceActionTests(unittest.TestCase):
                     row, no_evidence_outcome("B")
                 ]}, contract="evidence_reference")
 
-    def test_reference_schema_has_dynamic_two_to_four_scope_cardinality(self):
+    def test_reference_schema_allows_one_to_four_scope_cardinality(self):
         finish = next(row for row in REFERENCE_ACTION_JSON_SCHEMA["oneOf"]
                       if row["properties"]["action"]["const"] == "FINISH")
         outcomes = finish["properties"]["outcomes"]
-        self.assertEqual((outcomes["minItems"], outcomes["maxItems"]), (2, 4))
+        self.assertEqual((outcomes["minItems"], outcomes["maxItems"]), (1, 4))
 
     def test_clarify_question_remains_bounded_and_nonempty(self):
         valid = {"action": "CLARIFY", "question": "请说明设备型号。"}
