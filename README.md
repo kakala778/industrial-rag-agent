@@ -3,7 +3,77 @@
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
-## Current status — M12.2 demo case packaged
+## Current status — V1 local reviewer demo (M13.3 complete)
+
+Industrial requirements are often spread across specifications, tables, and
+technical descriptions. This repository demonstrates bounded,
+evidence-first research over local industrial PDFs. The Streamlit workspace
+accepts one PDF and a research task, runs the existing Evidence Research
+Agent, and displays its observed actions, host-validated source references,
+and Markdown report. Three buttons fill
+the task field with the M12 demonstration scenarios; they do not guarantee a
+particular result or represent a benchmark. The RAG baseline, retrieval
+settings, Agent contract, and semantic comparator remain unchanged.
+The Streamlit Agent's SEARCH uses the existing `KnowledgeBaseSession` Hybrid
+retrieval and BGE reranking defaults; the standalone PDF RAG CLI still uses
+Dense without reranking by default.
+
+For a reviewer-ready setup and workflow, see the
+[V1 demo guide](rag-agent/docs/demo-guide.md) and
+[V1 release summary](rag-agent/docs/v1-release-summary.md).
+
+### Architecture
+
+![Industrial RAG Evidence Research Agent architecture](rag-agent/docs/assets/architecture.svg)
+
+### Local demo
+
+From `rag-agent/`, install the Python dependencies, make the local Ollama
+service and `qwen3:4b` model available, then launch Streamlit:
+
+```powershell
+python -m pip install -r requirements.txt
+ollama pull qwen3:4b
+python -m streamlit run app/streamlit_app.py
+```
+
+Install Ollama separately. If its local service is not already running, start
+`ollama serve` in another terminal before launching the demo.
+
+Upload one permitted PDF, select an example task or enter your own, and choose
+**Run research**. The task buttons only populate the input. The synchronous
+Agent trace appears after execution returns. See the
+[application guide](rag-agent/README.md) for prerequisites, workflow and
+limitations.
+
+![Empty Industrial RAG demo workspace](rag-agent/docs/assets/workspace-empty.png)
+
+![Sanitized Agent action trace from the previously validated M13.2 run](rag-agent/docs/assets/example-action-trace.png)
+
+The M13.2 real-PDF run confirmed the local upload → Agent → report workflow and
+valid source/page provenance. Its open-ended Qwen run selected a page-7
+instruction asking suppliers to provide operating-environment data; an earlier
+M12 run of the same task selected the page-21 parameter section. The page-7
+citation location was authentic, but it did not contain the target parameter
+values. This difference is documented as an evidence-selection limitation,
+not counted as successful retrieval of those values. No retrieval or Agent
+tuning was made to mask it. A citation proves source location, not relevance,
+completeness or engineering correctness.
+
+A repeat run during M13.3 packaging reached SEARCH but the local Ollama action
+request returned HTTP 500 and the harness stopped with `tool_error`; the report
+correctly contained no final citation. A simple local Ollama chat check still
+returned HTTP 200, while the structured Agent request failed with a runner or
+memory-related response. This repeat attempt did not complete; the successful
+M13.2 browser run remains the recorded end-to-end demonstration. The current
+failure appears to be in the local model runner/runtime, not the Streamlit
+browser layer, and was not hidden by changing the frozen Agent contract.
+
+This is a local learning demo, not an engineering decision system or production
+service. See the [M13.3 release notes](rag-agent/docs/m13-3-demo-release.md)
+and [Agent handoff](rag-agent/docs/agent-handoff.md).
+
+## Validated real-document case — M12.2
 
 M12.2 reran three tasks through the existing CLI against the M12.1 local
 72-page communication transmission/access specification. Normal and structured
@@ -34,8 +104,9 @@ python -m src.agent_demo --task "查找传输系统的环境要求" `
 Each report is written under ignored `outputs/agent11/`. Citations identify
 source locations; they do not establish relevance, support, correctness,
 applicability or compliance. The older `--query/--scopes` invocation remains
-available for the two-scope Agent 0 compatibility path. No next milestone is
-recorded; RAG and Agent 1 remain frozen.
+available for the two-scope Agent 0 compatibility path. At the M12.2
+checkpoint, RAG and Agent 1 remained frozen and no next milestone had been
+selected.
 
 ## Previous decision — Agent 1.3 ROI review
 
@@ -111,7 +182,7 @@ Experiment checkpoint: `2918f99` on `codex/m9-hybrid-retrieval`.
 | Retrieval | Dense default; fixed BM25 + RRF Hybrid optional in PDF CLI |
 | BGE reranking | Optional Dense/Hybrid Top20 → Top3; off by default |
 | Visual enrichment / parent context | Offline experiments; not adopted in application |
-| Agent | M11 evidence research demo; local Qwen default, deterministic offline mode, explicit remote DeepSeek reference mode |
+| Agent | V1 single-PDF Streamlit demo; Agent SEARCH uses the existing Hybrid + BGE defaults. The CLI also supports explicit multi-document scopes and optional deterministic or remote DeepSeek-reference policies. |
 | Vector database / Web API / durable execution | Not implemented |
 
 Dense cosine, RRF and BGE scores have different meanings and scales. Hybrid
@@ -145,7 +216,7 @@ and claim-level citation validation carried forward as explicit limitations.
 - `minerU/mineru-405-poc/run-mineru.ps1`: portable local MinerU launcher.
   Runtime, models, industrial inputs and parser caches stay local.
 
-## Run
+## RAG CLI and evaluation run reference
 
 Prepare your own permitted inputs and local Ollama model. Run from the application directory:
 
@@ -187,6 +258,7 @@ new retrieval selectors is an error. See the [application README](rag-agent/READ
 | M11 | [Evidence Research Agent design and implementation plan](rag-agent/docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md), [Agent handoff](rag-agent/docs/agent-handoff.md) |
 | M12.1 | [Single PDF evidence research demo report](rag-agent/docs/m12-single-document-demo-report.md) |
 | M12.2 | [Industrial evidence research demo case](rag-agent/docs/m12-demo-case-report.md) |
+| V1 | [Demo guide](rag-agent/docs/demo-guide.md), [release summary](rag-agent/docs/v1-release-summary.md), [changelog](rag-agent/docs/v1-changelog.md), [final assessment](rag-agent/docs/v1-final-assessment.md), [M13.3 packaging record](rag-agent/docs/m13-3-demo-release.md) |
 
 ## Verification and private data
 

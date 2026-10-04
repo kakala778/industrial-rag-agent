@@ -10,6 +10,7 @@ from copy import deepcopy
 import csv
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -23,7 +24,6 @@ from evaluation.agent03_metrics import score_reference
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 PRIVATE_ROOT = APP_ROOT / "outputs" / "agent0_3"
-DEFAULT_AUDIT_ROOT = Path(r"C:\Users\iq\WorkBuddy\核对\agent0_3_pdf_audit")
 DEFAULT_RUN_ID = "run_23bb9cf5f607494e94ef22b25d4fdc17"
 
 
@@ -427,8 +427,9 @@ def rescore_artifacts(paths):
     return repaired, repaired_reviews, results
 
 
-def _default_paths():
+def _default_paths(audit_root=None):
     run03 = PRIVATE_ROOT / DEFAULT_RUN_ID
+    audit_root = Path(audit_root).expanduser() if audit_root is not None else None
     return {
         "frozen_manifest": APP_ROOT / "outputs" / "agent0_1" / "frozen_set.json",
         "search_observations": APP_ROOT / "outputs" / "agent0_1" / "run_5abe221949ec4668bcb96d13c14d1d5f" / "results.json",
@@ -437,8 +438,8 @@ def _default_paths():
         "agent02_reviewed": APP_ROOT / "outputs" / "agent0_2" / "reviewed_results.json",
         "agent03_raw": run03 / "results.json",
         "agent03_review_sheet": run03 / "human-review-sheet.csv",
-        "audit_report": DEFAULT_AUDIT_ROOT / "audit-report.local.md",
-        "audit_sheet": DEFAULT_AUDIT_ROOT / "human-review-sheet.ai-reviewed.local.csv",
+        "audit_report": audit_root / "audit-report.local.md" if audit_root else None,
+        "audit_sheet": audit_root / "human-review-sheet.ai-reviewed.local.csv" if audit_root else None,
         "repair_manifest": PRIVATE_ROOT / "gt-repair-manifest.local.json",
         "output_root": PRIVATE_ROOT,
     }
@@ -447,10 +448,33 @@ def _default_paths():
 def main():
     defaults = _default_paths()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--audit-root",
+        default=os.environ.get("AGENT03_AUDIT_ROOT"),
+        help="Local audit directory; may also be set with AGENT03_AUDIT_ROOT.",
+    )
+    parser.add_argument("--audit-report", help="Path to the local audit report.")
+    parser.add_argument("--audit-sheet", help="Path to the local reviewed audit sheet.")
     for name, value in defaults.items():
+        if name in ("audit_report", "audit_sheet"):
+            continue
         parser.add_argument("--" + name.replace("_", "-"), default=str(value))
     args = parser.parse_args()
-    paths = {name: Path(getattr(args, name)) for name in defaults}
+    if args.audit_report or args.audit_sheet:
+        if not args.audit_report or not args.audit_sheet:
+            parser.error("provide both --audit-report and --audit-sheet")
+        audit_report, audit_sheet = Path(args.audit_report), Path(args.audit_sheet)
+    elif args.audit_root:
+        audit_root = Path(args.audit_root).expanduser()
+        audit_report = audit_root / "audit-report.local.md"
+        audit_sheet = audit_root / "human-review-sheet.ai-reviewed.local.csv"
+    else:
+        parser.error("provide --audit-root or AGENT03_AUDIT_ROOT for the local audit files")
+
+    paths = {name: Path(getattr(args, name)) for name in defaults
+             if name not in ("audit_report", "audit_sheet")}
+    paths["audit_report"] = audit_report
+    paths["audit_sheet"] = audit_sheet
     rescore_artifacts(paths)
     print("Wrote derived repaired GT, candidate reviews, and offline rescore beneath outputs/agent0_3.")
 

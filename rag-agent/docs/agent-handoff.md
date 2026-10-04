@@ -2,7 +2,48 @@
 
 Updated: 2026-10-04.
 
-## Current status — M12.2 Industrial Evidence Research Demo Case
+## Current status — V1 release package (M13.3 complete)
+
+The local Streamlit UI accepts one PDF and task, then reuses the existing
+PyMuPDF loader, `KnowledgeBaseSession`, `AgentHarness`, host reference
+renderer, and Markdown report renderer. M13.3 adds three M12 task presets,
+clear separation between observed Agent actions and evidence-reference
+validation, visible capability limits, reviewer documentation, an architecture
+diagram, and sanitized presentation screenshots. It does not change retrieval,
+Agent behavior, citations, benchmark data, or the semantic comparator.
+
+For the reviewer setup and V1 capability boundary, see the
+[demo guide](demo-guide.md), [V1 release summary](v1-release-summary.md),
+[V1 changelog](v1-changelog.md), and
+[V1 final assessment](v1-final-assessment.md).
+
+The UI uses local Qwen/Ollama. The uploaded PDF is written to a temporary path
+only while parsing, and that file is removed before Agent execution. Results
+remain in Streamlit session state and are not persisted. Because the harness
+is synchronous, the actual trace is shown after the run returns. The UI is
+single-document and local-only; it has no durable history or online deployment
+setup. Run from `rag-agent/` with `python -m streamlit run app/streamlit_app.py`.
+
+M13.2 demonstrated the complete browser workflow, but its open-ended Qwen
+operating-environment run selected physical PDF page 7 (`document:6`), an
+instruction to provide environment information. The earlier M12 CLI run for
+that task selected page 21, which contained the parameter fields. The page-7
+citation resolved to the right source location but did not contain the target
+values. This is recorded as a semantic evidence-selection limitation; it does
+not justify retrieval tuning by itself. The screenshot shows the observed
+action trace only and omits the source excerpt and private document identity.
+The full package assessment is in [M13.3 release notes](m13-3-demo-release.md).
+
+A separate M13.3 replay loaded the PDF and completed SEARCH, then the
+structured local Ollama action request returned HTTP 500. The UI displayed a
+`tool_error` and preliminary report without a final citation; the browser
+console remained clear. A minimal local chat request returned HTTP 200, but
+the structured request error matched a model-runner/memory category. The exact
+underlying message was not retained. This replay did not complete; the earlier
+successful M13.2 run remains the end-to-end success record. No RAG, Agent, or
+selector changes were made.
+
+## Historical status — M12.2 Industrial Evidence Research Demo Case
 
 M12.2 packaged and reran three real-document tasks through the existing CLI
 against the M12.1 local 72-page communication transmission/access
@@ -28,7 +69,8 @@ To permit a genuine single-PDF run, `evidence_reference` now accepts one to
 four explicit scopes. `copied_quote` remains exactly two-scope. This small
 contract extension did not change retrieval defaults, ranking parameters,
 Agent 1, or the action set. M12.2 changed only demo packaging and
-documentation. Agent 2 has not started; no next milestone is specified.
+documentation. At that checkpoint Agent 2 had not started and no next
+milestone had been specified.
 
 ## Historical status — M11 Evidence Research Agent
 
@@ -66,11 +108,12 @@ exhaustion, preliminary-report labeling, and absence of source absolute paths.
 It did not evaluate live Qwen/DeepSeek semantic selection or industrial-PDF
 evidence relevance.
 
-## Next milestone — not specified
+## M12.2 checkpoint — next milestone not specified
 
-No follow-up beyond M12.2 is recorded. Preserve the current evidence-first
-boundary until a concrete next task is defined. Keep RAG and Agent 1 frozen;
-do not infer that the demo is safe for engineering or compliance decisions.
+At that historical checkpoint no follow-up beyond M12.2 had been selected.
+M13.1 later introduced the Streamlit interface; M13.3 is the current status
+above. Preserve the evidence-first boundary. Keep RAG and Agent 1 frozen; do
+not infer that the demo is safe for engineering or compliance decisions.
 
 ## Previous status — Agent 1.3 ROI review
 

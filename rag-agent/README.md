@@ -2,11 +2,94 @@
 
 ## Project Overview
 
-This is a minimal RAG prototype supporting Markdown/PDF document processing,
-vector retrieval, and local LLM generation. It is a learning demo, not an
-industrial-grade RAG system or production service.
+This is a local learning demo for evidence-first research over industrial
+PDFs, built on the repository's RAG pipeline and bounded Agent. It is not an
+industrial decision system or production service.
 
-## Current Stage — M12.2 demo case packaged
+## Current Stage — V1 local reviewer demo (M13.3 complete)
+
+This is a local learning demo for evidence-first research over industrial
+documents. The Streamlit workspace accepts one PDF and a task, then calls the
+existing PyMuPDF loader, `KnowledgeBaseSession`, bounded `AgentHarness`, host
+reference renderer, and Markdown report renderer. It presents captured
+SEARCH / LOOKUP / CLARIFY / FINISH actions, scope outcomes, validated source
+references, and the report. The synchronous trace appears after the run
+returns; the UI does not simulate live reasoning or actions.
+Its SEARCH action uses the existing `KnowledgeBaseSession` Hybrid retrieval
+and BGE reranking defaults. The separate PDF RAG CLI continues to default to
+Dense without reranking.
+
+![Industrial RAG Evidence Research Agent architecture](docs/assets/architecture.svg)
+
+### Run locally
+
+Requirements: Python dependencies from `requirements.txt`, a running local
+Ollama service with `qwen3:4b`, and the existing retrieval model dependencies
+(the sentence-transformers model may download on first use). From this
+directory:
+
+```powershell
+python -m pip install -r requirements.txt
+ollama pull qwen3:4b
+python -m streamlit run app/streamlit_app.py
+```
+
+Install Ollama separately. If its local service is not already running, start
+`ollama serve` in another terminal before launching the demo.
+
+Upload one permitted PDF. Click one of the example buttons to fill the task
+field, review or edit the task, then press **Run research**. The three
+examples mirror the M12 demonstration: operating-environment requirements,
+structured equipment information, and a template for checking one specified
+unsupported parameter.
+They are illustrative workflows, not benchmark cases or guaranteed outcomes.
+The task controls do not upload or run anything by themselves.
+
+![Empty local demo workspace](docs/assets/workspace-empty.png)
+
+![Sanitized SEARCH, LOOKUP and FINISH trace from the previously validated M13.2 run](docs/assets/example-action-trace.png)
+
+The uploaded PDF is held by Streamlit and written to a temporary file only
+while PyMuPDF parses it; the temporary file is removed before Agent execution.
+Current results stay in Streamlit session memory and are not persisted. The
+CLI continues to write reports under ignored `outputs/agent11/`.
+
+### Capability boundary
+
+The M13.2 live UI run confirmed upload, execution, evidence rendering and report
+generation with the local Qwen model. For the operating-environment task, that
+run cited physical PDF page 7, block `document:6`, whose excerpt instructed
+suppliers to provide environment information. M12's earlier CLI run for the
+same task cited page 21, the section containing the parameter fields. The
+page-7 citation resolved to the correct source location, but the selected
+content did not provide the requested values. This is direct evidence that
+traceable provenance does not guarantee useful evidence selection; the two
+runs are retained as separate observations, with no accuracy claim or
+retrieval tuning.
+
+A repeat Q1 run during M13.3 verification reached SEARCH but stopped at
+selection: the structured local Ollama request returned HTTP 500, and the
+Agent correctly produced a preliminary `tool_error` report without final
+evidence. A simple local chat request returned HTTP 200; the structured
+request's error classification pointed to the model runner or memory. This
+repeat attempt did not complete. The earlier M13.2 real browser run completed
+SEARCH → LOOKUP → FINISH; the M13.3 failure is kept visible as a runtime
+limitation rather than presented as a successful re-run.
+
+The demo does not establish parser fidelity, semantic relevance, completeness,
+engineering correctness, safety, or standards compliance. It does not provide
+engineering judgments, diagnosis, recommendations, multi-document UI,
+persistent history, authentication, or online deployment. The parser exposes
+page-level document blocks, not table-cell coordinates. See the
+[V1 demo guide](docs/demo-guide.md),
+[V1 release summary](docs/v1-release-summary.md),
+[V1 changelog](docs/v1-changelog.md),
+[V1 final assessment](docs/v1-final-assessment.md),
+[M13.3 package and assessment](docs/m13-3-demo-release.md),
+[Agent handoff](docs/agent-handoff.md), and historical
+[M12.2 real-document case](docs/m12-demo-case-report.md).
+
+## Historical status — M12.2 demo case packaged
 
 M12.2 reran three independent real-document research tasks through the
 existing CLI against the M12.1 local 72-page communication
@@ -47,7 +130,8 @@ RAG defaults and retrieval parameters remain frozen. Agent 1 semantic
 comparison remains evaluation-only and is not used in this demo. See the
 [M11 design](docs/superpowers/specs/2026-10-03-m11-evidence-research-agent-design.md),
 [implementation plan](docs/superpowers/plans/2026-10-03-m11-evidence-research-agent.md)
-and [Agent handoff](docs/agent-handoff.md). No next milestone is recorded.
+and [Agent handoff](docs/agent-handoff.md). At the M12.2 checkpoint, no next
+step had yet been selected.
 
 M11 closeout passed 345 tests and a synthetic three-document CLI smoke. That
 smoke validated harness mechanics and report privacy, not live-model selection
@@ -160,25 +244,30 @@ retriever; Dense without reranking remains the default. The local smoke results
 and limitations are recorded in the
 [M9.3 integration note](docs/m9-optional-hybrid-integration.md).
 
-## Current Architecture
+## Current Demo Architecture
 
 ```text
-PDF / Markdown
+One local PDF
 ↓
-Document Pipeline
+PyMuPDF document loader
 ↓
-Chunk
+KnowledgeBaseSession
 ↓
-Embedding
+Existing retrieval
 ↓
-Retriever
+Bounded Agent loop: SEARCH / LOOKUP / CLARIFY / FINISH
 ↓
-Prompt
+Host evidence-ID resolution and citation validation
 ↓
-Ollama Qwen3-4B
+Streamlit workspace
 ↓
-Answer
+Markdown research report
 ```
+
+The application keeps legacy RAG CLI and evaluation workflows below; this
+diagram describes the current M13.3 reviewer UI.
+The Agent's existing search-tool defaults are Hybrid retrieval plus BGE
+reranking; this is distinct from the standalone PDF RAG CLI's Dense default.
 
 ## Implemented Features
 
@@ -193,10 +282,12 @@ Answer
 - Markdown and PDF retrieval evaluation datasets and scripts
 - Local LLM generation through Ollama with `qwen3:4b`
 - Retrieved-source citations in the RAG CLI
-- Agent 0 scoped evidence investigation with SEARCH / LOOKUP / CLARIFY / FINISH,
-  deterministic execution and optional locally validated Qwen JSON selection
+- Bounded evidence research through SEARCH / LOOKUP / CLARIFY / FINISH with
+  host-resolved evidence IDs and citations
+- Single-PDF Streamlit reviewer interface with observed action timeline,
+  evidence panel, and Markdown report
 
-## Quick Start
+## RAG CLI Quick Start
 
 Install the Python dependencies:
 
@@ -250,7 +341,7 @@ The legacy `--mode` selector cannot be combined with `--retriever` or
 `--rerank`. Hybrid rank and score diagnostics are kept out of ordinary result
 and citation display; Dense cosine and Hybrid RRF scores have different scales.
 
-## Current Limitations
+## RAG baseline limitations
 
 This baseline does not include:
 
@@ -270,7 +361,11 @@ parser supports Advanced + OCR and structured blocks, but OCR accuracy, image
 information and layout relationships remain limited. Real project and
 teacher-provided data must remain out of the repository.
 
-## Long-term Planned Pipeline
+## Historical long-term pipeline sketch
+
+This was an early project plan. The current V1 execution path is described in
+[Current Demo Architecture](#current-demo-architecture) and the
+[V1 release summary](docs/v1-release-summary.md).
 
 ```text
 Documents
@@ -886,8 +981,12 @@ committed. A fresh clone needs its own MinerU runtime and runner path.
 - [x] M9.2 — Independent validation and ranking audit (offline; page regressions recorded)
 - [x] M9.3 — Optional Hybrid retrieval integration (Dense remains default)
 - [x] M10.1 — Parent context controlled experiment (offline; not adopted)
-- [ ] Agent
-- [ ] Industrial document improvements
+- [x] Agent 0 bounded evidence harness
+- [x] M11 Evidence Research Agent
+- [x] M13 Streamlit reviewer demo and V1 package
+
+Further industrial-document work is future research, not an unfinished V1
+requirement; see the [V1 release summary](docs/v1-release-summary.md).
 
 ## Key Decisions
 

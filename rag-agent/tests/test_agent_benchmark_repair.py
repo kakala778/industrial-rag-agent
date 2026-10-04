@@ -2,6 +2,21 @@ import unittest
 
 
 class RepairedExpectedEvidenceTests(unittest.TestCase):
+    def test_audit_root_is_supplied_at_runtime(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from evaluation.rescore_repaired_agent_benchmark import _default_paths
+
+        self.assertIsNone(_default_paths()["audit_report"])
+        with TemporaryDirectory() as audit_root:
+            paths = _default_paths(audit_root)
+
+        self.assertEqual(paths["audit_report"], Path(audit_root) / "audit-report.local.md")
+        self.assertEqual(
+            paths["audit_sheet"],
+            Path(audit_root) / "human-review-sheet.ai-reviewed.local.csv",
+        )
+
     def _oracle(self, expected_ids, *, conditions=None):
         return {
             "A": {
