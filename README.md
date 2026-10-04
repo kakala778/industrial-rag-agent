@@ -1,5 +1,7 @@
 # Industrial RAG Agent
 
+An evidence-first industrial document research agent demo built with RAG, bounded tool execution, citation validation, and Streamlit.
+
 A local learning prototype for document retrieval and grounded generation. This
 is an experimental project, not a production industrial system.
 
