@@ -1,7 +1,7 @@
 # Industrial RAG Agent V1 Release
 
-**Release scope:** local, first-version reviewer demo  
-**Status:** V1 demo development closed  
+**Release scope:** local, first-version reviewer demo
+**Status:** V1 demo development closed
 **Date:** 2026-10-04
 
 ## Project goal

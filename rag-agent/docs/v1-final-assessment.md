@@ -1,6 +1,6 @@
 # Industrial RAG Agent V1 Final Assessment
 
-**Version:** `v1.0-demo`  
+**Version:** `v1.0-demo`
 **Decision:** V1 is frozen as a local reviewer demonstration.
 
 ## What V1 achieved

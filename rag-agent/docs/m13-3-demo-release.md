@@ -1,6 +1,6 @@
 # M13.3 — Industrial RAG Agent Demo Package
 
-**Status:** Complete as a local first-version demonstration package  
+**Status:** Complete as a local first-version demonstration package
 **Date:** 2026-10-04
 
 ## Purpose and boundary
